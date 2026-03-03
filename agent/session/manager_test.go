@@ -152,6 +152,7 @@ func TestDefaultManagerPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	_ = manager // Avoid unused variable error
 
 	// Should use default path
 	home, _ := os.UserHomeDir()

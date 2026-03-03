@@ -64,11 +64,14 @@ func TestExecToolTimeout(t *testing.T) {
 		"command": "sleep 10",
 	})
 
-	if err == nil {
-		t.Error("expected timeout error")
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
 	}
 	if result.Success {
 		t.Error("expected failure due to timeout")
+	}
+	if result.Error == nil {
+		t.Error("expected timeout error in result")
 	}
 }
 

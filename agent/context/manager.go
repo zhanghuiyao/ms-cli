@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -17,13 +18,13 @@ type Message struct {
 
 // Manager handles context assembly, budget tracking, and compaction.
 type Manager struct {
+	mu            sync.RWMutex // Protects all fields below
 	maxTokens     int
 	reserveTokens int
 	threshold     float64
-
-	history   []Message
-	systemMsg *Message
-	totalUsed int
+	history       []Message
+	systemMsg     *Message
+	totalUsed     int
 }
 
 // NewManager creates a new context manager.
@@ -38,16 +39,22 @@ func NewManager(maxTokens int) *Manager {
 
 // SetReserveTokens sets the reserve tokens for response.
 func (m *Manager) SetReserveTokens(n int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.reserveTokens = n
 }
 
 // SetThreshold sets the compaction threshold (0-1).
 func (m *Manager) SetThreshold(t float64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.threshold = t
 }
 
 // SetSystemMessage sets the system message.
 func (m *Manager) SetSystemMessage(content string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.systemMsg = &Message{
 		Role:      "system",
 		Content:   content,
@@ -58,6 +65,9 @@ func (m *Manager) SetSystemMessage(content string) {
 
 // AddMessage adds a message to history.
 func (m *Manager) AddMessage(role, content string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	tokens := estimateTokens(content)
 	msg := Message{
 		Role:      role,
@@ -69,8 +79,8 @@ func (m *Manager) AddMessage(role, content string) {
 	m.totalUsed += tokens
 
 	// Check if compaction needed
-	if m.ShouldCompact() {
-		m.Compact()
+	if m.shouldCompactLocked() {
+		m.compactLocked()
 	}
 }
 
@@ -82,12 +92,26 @@ func (m *Manager) AddToolResult(toolName, result string) {
 
 // ShouldCompact returns true if context should be compacted.
 func (m *Manager) ShouldCompact() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.shouldCompactLocked()
+}
+
+// shouldCompactLocked must be called with mu held
+func (m *Manager) shouldCompactLocked() bool {
 	available := m.maxTokens - m.reserveTokens
 	return float64(m.totalUsed) > float64(available)*m.threshold
 }
 
 // Compact reduces context size by summarizing old messages.
 func (m *Manager) Compact() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.compactLocked()
+}
+
+// compactLocked must be called with mu held
+func (m *Manager) compactLocked() {
 	if len(m.history) <= 2 {
 		return // Keep minimum history
 	}
@@ -114,7 +138,7 @@ func (m *Manager) Compact() {
 	}}, keep...)
 
 	// Recalculate total
-	m.recalculateTokens()
+	m.recalculateTokensLocked()
 }
 
 // summarizeMessages creates a summary of messages (placeholder).
@@ -130,8 +154,8 @@ func (m *Manager) summarizeMessages(msgs []Message) string {
 	return strings.Join(parts, "; ")
 }
 
-// recalculateTokens recalculates total token count.
-func (m *Manager) recalculateTokens() {
+// recalculateTokensLocked must be called with mu held
+func (m *Manager) recalculateTokensLocked() {
 	m.totalUsed = 0
 	if m.systemMsg != nil {
 		m.totalUsed += m.systemMsg.Tokens
@@ -143,7 +167,10 @@ func (m *Manager) recalculateTokens() {
 
 // BuildMessages returns the complete message list for LLM.
 func (m *Manager) BuildMessages() []Message {
-	result := make([]Message, 0)
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make([]Message, 0, len(m.history)+1)
 	if m.systemMsg != nil {
 		result = append(result, *m.systemMsg)
 	}
@@ -175,16 +202,22 @@ func (m *Manager) BuildLLMMessages() []struct {
 
 // GetTokenCount returns current token usage.
 func (m *Manager) GetTokenCount() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.totalUsed
 }
 
 // GetRemainingTokens returns available tokens.
 func (m *Manager) GetRemainingTokens() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.maxTokens - m.totalUsed - m.reserveTokens
 }
 
 // Clear clears all history.
 func (m *Manager) Clear() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.history = make([]Message, 0)
 	m.totalUsed = 0
 	if m.systemMsg != nil {
@@ -194,6 +227,9 @@ func (m *Manager) Clear() {
 
 // Save persists context to JSON.
 func (m *Manager) Save() ([]byte, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	data := struct {
 		System    *Message  `json:"system,omitempty"`
 		History   []Message `json:"history"`
@@ -216,6 +252,9 @@ func (m *Manager) Load(data []byte) error {
 	if err := json.Unmarshal(data, &saved); err != nil {
 		return err
 	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.systemMsg = saved.System
 	m.history = saved.History
 	m.totalUsed = saved.TotalUsed

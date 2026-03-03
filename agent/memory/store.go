@@ -255,9 +255,4 @@ func (s *FileStore) load() error {
 	return json.Unmarshal(data, &s.data)
 }
 
-// RetrieveResult is a search result with relevance score.
-type RetrieveResult struct {
-	Key   string
-	Value string
-	Score int
-}
+// RetrieveResult is defined in retrieve.go

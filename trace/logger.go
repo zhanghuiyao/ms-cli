@@ -215,6 +215,27 @@ type Stats struct {
 	AvgToolTime    time.Duration
 	TokensIn       int
 	TokensOut      int
+	// Fields for backward compatibility with tests
+	UsedTokens int
+	MaxTokens  int
+	UsedCost   float64
+	MaxCost    float64
+}
+
+// PercentUsed returns percentage of token budget used.
+func (s Stats) PercentUsed() float64 {
+	if s.MaxTokens <= 0 {
+		return 0
+	}
+	return float64(s.UsedTokens) / float64(s.MaxTokens) * 100
+}
+
+// CostPercentUsed returns percentage of cost budget used.
+func (s Stats) CostPercentUsed() float64 {
+	if s.MaxCost <= 0 {
+		return 0
+	}
+	return s.UsedCost / s.MaxCost * 100
 }
 
 // Analyze computes statistics from traces.
