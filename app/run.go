@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/vigo999/ms-cli/agent/loop"
+	"github.com/vigo999/ms-cli/executor"
 	"github.com/vigo999/ms-cli/ui"
 	"github.com/vigo999/ms-cli/ui/model"
 )
@@ -55,25 +56,29 @@ func (a *Application) processInput(input string) {
 		return
 	}
 
-	// Free-form: send to engine
+	// Free-form: send to engine using new executor
 	a.EventCh <- model.Event{Type: model.AgentThinking}
 
-	events, err := a.Engine.Run(loop.Task{Description: trimmed})
-	if err != nil {
-		a.EventCh <- model.Event{
-			Type:     model.ToolError,
-			ToolName: "Engine",
-			Message:  err.Error(),
-		}
-		return
+	// Create runner based on config
+	var runner *executor.Runner
+	if a.Config != nil && a.Config.Model.APIKey != "" {
+		// Use LLM-powered runner
+		runner = executor.NewSmartRunner(a.Config.Model.APIKey, a.Config.Model.Endpoint)
+	} else {
+		// Use rule-based runner
+		runner = executor.NewRunner()
 	}
 
-	for _, ev := range events {
-		a.EventCh <- model.Event{
-			Type:    model.AgentReply,
-			Message: ev.Message,
+	go func() {
+		task := loop.Task{Description: trimmed}
+		if err := runner.Execute(task, a.EventCh); err != nil {
+			a.EventCh <- model.Event{
+				Type:     model.ToolError,
+				ToolName: "Executor",
+				Message:  err.Error(),
+			}
 		}
-	}
+	}()
 }
 
 // runDemo starts the TUI with fake events for preview/testing.

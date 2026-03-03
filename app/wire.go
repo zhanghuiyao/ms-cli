@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/vigo999/ms-cli/agent/loop"
+	"github.com/vigo999/ms-cli/internal/config"
 	"github.com/vigo999/ms-cli/ui/model"
 )
 
@@ -14,4 +15,5 @@ type Application struct {
 	Demo    bool
 	WorkDir string
 	RepoURL string
+	Config  *config.Config
 }
