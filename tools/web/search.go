@@ -1,13 +1,14 @@
-package tools
+package web
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/vigo999/ms-cli/tools"
 )
 
 // WebSearchTool performs web searches using DuckDuckGo.
@@ -34,21 +35,21 @@ func (t *WebSearchTool) SetMaxResults(n int) {
 func (t *WebSearchTool) Name() string        { return "web_search" }
 func (t *WebSearchTool) Description() string { return "Search the web for information" }
 
-func (t *WebSearchTool) Execute(ctx context.Context, params map[string]any) (Result, error) {
+func (t *WebSearchTool) Execute(ctx context.Context, params map[string]any) (tools.Result, error) {
 	query, ok := params["query"].(string)
 	if !ok || query == "" {
-		return Result{Success: false, Error: fmt.Errorf("query parameter is required")}, nil
+		return tools.Result{Success: false, Error: fmt.Errorf("query parameter is required")}, nil
 	}
 
 	results, err := t.search(ctx, query)
 	if err != nil {
-		return Result{Success: false, Error: err}, nil
+		return tools.Result{Success: false, Error: err}, nil
 	}
 
 	// Format results
 	output := t.formatResults(results)
 
-	return Result{
+	return tools.Result{
 		Success: true,
 		Output:  output,
 		Data: map[string]any{
@@ -60,13 +61,13 @@ func (t *WebSearchTool) Execute(ctx context.Context, params map[string]any) (Res
 }
 
 // WebSearchDefinition returns the schema for web_search.
-func WebSearchDefinition() Definition {
+func WebSearchDefinition() tools.Definition {
 	return Definition{
 		Name:        "web_search",
 		Description: "Search the web for current information. Returns titles, URLs, and snippets.",
-		Parameters: Parameters{
+		Parameters: tools.Parameters{
 			Type: "object",
-			Properties: map[string]Property{
+			Properties: map[string]tools.Property{
 				"query": {
 					Type:        "string",
 					Description: "Search query",
@@ -176,7 +177,6 @@ func (t *WebSearchTool) formatResults(results []SearchResult) string {
 func splitHTML(html string) []string {
 	var result []string
 	var current string
-	inTag := false
 
 	for _, ch := range html {
 		if ch == '<' {
@@ -184,11 +184,9 @@ func splitHTML(html string) []string {
 				result = append(result, current)
 				current = ""
 			}
-			inTag = true
 			current += string(ch)
 		} else if ch == '>' {
 			current += string(ch)
-			inTag = false
 			result = append(result, current)
 			current = ""
 		} else {

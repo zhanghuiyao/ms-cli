@@ -21,8 +21,8 @@ func TestRegistry(t *testing.T) {
 	}
 
 	// Get
-	tool, ok := reg.Get("test_tool")
-	if !ok {
+	tool, err := reg.Get("test_tool")
+	if err != nil {
 		t.Error("expected to find tool")
 	}
 	if tool.Name() != "test_tool" {

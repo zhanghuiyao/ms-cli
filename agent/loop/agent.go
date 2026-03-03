@@ -272,7 +272,7 @@ func extractFilePath(context string) string {
 		`file[:\s]+(\S+\.(go|yaml|yml|json|md|txt))`,
 	}
 
-	for _, pattern := range patterns {
+	for range patterns {
 		// Simple string matching for now
 		if idx := strings.Index(context, ".go"); idx > 0 {
 			start := idx

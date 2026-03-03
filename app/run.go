@@ -56,17 +56,19 @@ func (a *Application) processInput(input string) {
 		return
 	}
 
-	// Free-form: send to engine using new executor
+	// Free-form: send to engine using ReAct engine
 	a.EventCh <- model.Event{Type: model.AgentThinking}
 
-	// Create runner based on config
-	var runner *executor.Runner
+	// Use executor to run task through ReAct engine
+	runner := executor.NewRunnerWithWorkDir(a.WorkDir)
+	
+	// Configure LLM if API key is available
 	if a.Config != nil && a.Config.Model.APIKey != "" {
-		// Use LLM-powered runner
-		runner = executor.NewSmartRunner(a.Config.Model.APIKey, a.Config.Model.Endpoint)
-	} else {
-		// Use rule-based runner
-		runner = executor.NewRunner()
+		runner = executor.NewSmartRunnerWithProvider(
+			a.Config.Model.Provider,
+			a.Config.Model.APIKey,
+			a.Config.Model.Endpoint,
+		)
 	}
 
 	go func() {
