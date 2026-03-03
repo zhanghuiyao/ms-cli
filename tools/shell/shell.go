@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"syscall"
@@ -55,13 +54,13 @@ func (t *ExecTool) Description() string { return "Execute a shell command" }
 func (t *ExecTool) Execute(ctx context.Context, params map[string]any) (tools.Result, error) {
 	command, _ := params["command"].(string)
 	if command == "" {
-		return tools.Result{Success: false, Error: fmt.Errorf("command parameter is required")}, nil
+		return tools.Result{Success: false, Output: "command parameter is required"}, nil
 	}
 
 	// Parse and validate command
 	parsed, err := t.parseCommand(command)
 	if err != nil {
-		return tools.Result{Success: false, Error: fmt.Errorf("command validation failed: %w", err)}, nil
+		return tools.Result{Success: false, Output: fmt.Sprintf("command validation failed: %v", err)}, nil
 	}
 
 	// Check risk level
@@ -74,22 +73,22 @@ func (t *ExecTool) Execute(ctx context.Context, params map[string]any) (tools.Re
 
 	// Block critical commands
 	if risk == RiskCritical {
-		return tools.Result{Success: false, Error: fmt.Errorf("command blocked: critical risk operation detected")}, nil
+		return tools.Result{Success: false, Output: "command blocked: critical risk operation detected"}, nil
 	}
 
 	// Check whitelist
 	if len(t.AllowedCmds) > 0 && !t.isAllowed(parsed.BaseCmd) {
-		return tools.Result{Success: false, Error: fmt.Errorf("command '%s' not in allowed list", parsed.BaseCmd)}, nil
+		return tools.Result{Success: false, Output: fmt.Sprintf("command '%s' not in allowed list", parsed.BaseCmd)}, nil
 	}
 
 	// Check blacklist
 	if t.isBlocked(parsed.BaseCmd) {
-		return tools.Result{Success: false, Error: fmt.Errorf("command '%s' is blocked", parsed.BaseCmd)}, nil
+		return tools.Result{Success: false, Output: fmt.Sprintf("command '%s' is blocked", parsed.BaseCmd)}, nil
 	}
 
 	// Security: Enhanced command validation
 	if err := t.validateCommandSecurity(parsed); err != nil {
-		return tools.Result{Success: false, Error: err}, nil
+		return tools.Result{Success: false, Output: err.Error()}, nil
 	}
 
 	// Create context with timeout
@@ -106,16 +105,16 @@ func (t *ExecTool) Execute(ctx context.Context, params map[string]any) (tools.Re
 	var output strings.Builder
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return tools.Result{Success: false, Error: fmt.Errorf("create stdout pipe: %w", err)}, nil
+		return tools.Result{Success: false, Output: fmt.Sprintf("create stdout pipe: %v", err)}, nil
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		return tools.Result{Success: false, Error: fmt.Errorf("create stderr pipe: %w", err)}, nil
+		return tools.Result{Success: false, Output: fmt.Sprintf("create stderr pipe: %v", err)}, nil
 	}
 
 	// Start command
 	if err := cmd.Start(); err != nil {
-		return tools.Result{Success: false, Error: fmt.Errorf("start command: %w", err)}, nil
+		return tools.Result{Success: false, Output: fmt.Sprintf("start command: %v", err)}, nil
 	}
 
 	// Stream output with scanner
@@ -163,15 +162,15 @@ func (t *ExecTool) Execute(ctx context.Context, params map[string]any) (tools.Re
 	if err != nil {
 		// Check for timeout first
 		if execCtx.Err() == context.DeadlineExceeded {
-			return tools.Result{Success: false, Error: fmt.Errorf("command timed out after %v", t.Timeout)}, nil
+			return tools.Result{Success: false, Output: fmt.Sprintf("command timed out after %v", t.Timeout)}, nil
 		}
-		
+
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
 				exitCode = status.ExitStatus()
 			}
 		} else {
-			return tools.Result{Success: false, Error: fmt.Errorf("command failed: %w", err)}, nil
+			return tools.Result{Success: false, Output: fmt.Sprintf("command failed: %v", err)}, nil
 		}
 	}
 
@@ -179,7 +178,6 @@ func (t *ExecTool) Execute(ctx context.Context, params map[string]any) (tools.Re
 	return tools.Result{
 		Success: success,
 		Output:  output.String(),
-		Error:   nil,
 		Data: map[string]any{
 			"command":    command,
 			"exit_code":  exitCode,
@@ -224,22 +222,17 @@ func (t *ExecTool) buildEnv() []string {
 
 // ParsedCommand represents a parsed shell command
 type ParsedCommand struct {
-	Raw     string
-	BaseCmd string   // Main command (first token)
+	BaseCmd string   // The base command (e.g., "git" from "git status")
 	Args    []string // Command arguments
-	HasPipe bool     // Contains pipe operator
-	HasRedirect bool // Contains redirect operator
+	Raw     string   // Original command string
 }
 
-// parseCommand parses a shell command to extract the base command and metadata
+// parseCommand parses a shell command string
 func (t *ExecTool) parseCommand(cmd string) (*ParsedCommand, error) {
 	parsed := &ParsedCommand{
-		Raw: cmd,
+		Raw:  cmd,
+		Args: []string{},
 	}
-
-	// Check for pipes and redirects
-	parsed.HasPipe = strings.Contains(cmd, "|")
-	parsed.HasRedirect = strings.ContainsAny(cmd, "><")
 
 	// Extract base command (first token before space, pipe, or redirect)
 	// Handle quoted strings
@@ -250,88 +243,93 @@ func (t *ExecTool) parseCommand(cmd string) (*ParsedCommand, error) {
 	for _, prefix := range prefixes {
 		if strings.HasPrefix(strings.ToLower(cmd), prefix) {
 			cmd = strings.TrimSpace(cmd[len(prefix):])
-			// Remove quotes if present
-			cmd = strings.Trim(cmd, `"'`)
+		}
+	}
+
+	// Remove quotes if the entire command is quoted
+	if (strings.HasPrefix(cmd, "\"") && strings.HasSuffix(cmd, "\"")) ||
+		(strings.HasPrefix(cmd, "'") && strings.HasSuffix(cmd, "'")) {
+		cmd = cmd[1 : len(cmd)-1]
+	}
+
+	// Find the first command before any pipes, redirects, or logical operators
+	separators := []string{"|", "&&", "||", ";", ">", "<", "&"}
+	cmdPart := cmd
+	for _, sep := range separators {
+		if idx := strings.Index(cmd, sep); idx > 0 {
+			cmdPart = strings.TrimSpace(cmd[:idx])
 			break
 		}
 	}
 
-	// Extract first token (base command)
-	fields := strings.FieldsFunc(cmd, func(r rune) bool {
-		return r == ' ' || r == '|' || r == ';' || r == '&' || r == '>' || r == '<'
-	})
-
+	// Extract base command and args
+	fields := strings.Fields(cmdPart)
 	if len(fields) == 0 {
-		return nil, fmt.Errorf("no command found")
+		return nil, fmt.Errorf("empty command")
 	}
 
 	parsed.BaseCmd = fields[0]
-	// Remove any path prefix to get just the command name
-	parsed.BaseCmd = filepath.Base(parsed.BaseCmd)
-	parsed.Args = fields[1:]
+	if len(fields) > 1 {
+		parsed.Args = fields[1:]
+	}
 
 	return parsed, nil
 }
 
-// assessRisk determines the risk level of a command
+// assessRisk assesses the risk level of a command
 func (t *ExecTool) assessRisk(parsed *ParsedCommand) CommandRisk {
-	cmd := strings.ToLower(parsed.BaseCmd)
-	fullCmd := strings.ToLower(parsed.Raw)
+	base := strings.ToLower(parsed.BaseCmd)
 
-	// Critical: System-threatening operations
-	criticalPatterns := []string{
-		`:\s*\(\s*\)\s*{\s*:\s*\|\s*:\s*&\s*}\s*;\s*:\s*`, // Fork bomb
-		`rm\s+-rf\s+/`,      // Delete root
-		`dd\s+if=\s*/dev/`,  // Direct disk operations
-		`mkfs`,
-		`>\s*/dev/sda`,
-	}
-
-	for _, pattern := range criticalPatterns {
-		if matched, _ := regexp.MatchString(pattern, fullCmd); matched {
+	// Critical commands that can cause serious damage
+	criticalCmds := []string{"rm", "rmdir", "unlink", "mkfs", "dd", "fdisk", "format", "mkfs.ext4"}
+	for _, cmd := range criticalCmds {
+		if base == cmd {
 			return RiskCritical
 		}
 	}
 
-	// High: Destructive operations
-	highRiskCmds := []string{"rm", "rmdir", "unlink", "mv", "chmod", "chown"}
-	for _, risky := range highRiskCmds {
-		if cmd == risky {
+	// High risk - network commands that could exfiltrate data
+	highRiskCmds := []string{"curl", "wget", "nc", "netcat", "telnet", "ssh", "scp", "ftp", "sftp"}
+	for _, cmd := range highRiskCmds {
+		if base == cmd {
 			return RiskHigh
 		}
 	}
 
-	// Medium: Network operations and downloads
-	mediumRiskCmds := []string{"curl", "wget", "nc", "netcat", "telnet", "ssh", "scp", "ftp"}
-	for _, risky := range mediumRiskCmds {
-		if cmd == risky {
-			// Check for pipe to shell (curl | sh pattern)
-			if strings.Contains(fullCmd, "| sh") || strings.Contains(fullCmd, "| bash") {
-				return RiskHigh
-			}
+	// Medium risk - commands that modify system state
+	mediumRiskCmds := []string{"mv", "cp", "chmod", "chown", "mkdir", "touch", "echo", "cat"}
+	for _, cmd := range mediumRiskCmds {
+		if base == cmd {
 			return RiskMedium
 		}
+	}
+
+	// Check for shell escapes which increase risk
+	if strings.Contains(parsed.Raw, ";") || strings.Contains(parsed.Raw, "&&") ||
+		strings.Contains(parsed.Raw, "||") || strings.Contains(parsed.Raw, "$") {
+		return RiskMedium
 	}
 
 	return RiskLow
 }
 
-// isAllowed checks if a command is in the whitelist
+// isAllowed checks if command is in whitelist
 func (t *ExecTool) isAllowed(cmd string) bool {
-	cmd = strings.ToLower(cmd)
+	if len(t.AllowedCmds) == 0 {
+		return true
+	}
 	for _, allowed := range t.AllowedCmds {
-		if strings.ToLower(allowed) == cmd {
+		if strings.EqualFold(cmd, allowed) {
 			return true
 		}
 	}
 	return false
 }
 
-// isBlocked checks if a command is in the blacklist
+// isBlocked checks if command is in blacklist
 func (t *ExecTool) isBlocked(cmd string) bool {
-	cmd = strings.ToLower(cmd)
 	for _, blocked := range t.BlockedCmds {
-		if strings.ToLower(blocked) == cmd {
+		if strings.EqualFold(cmd, blocked) {
 			return true
 		}
 	}
@@ -359,7 +357,7 @@ func (t *ExecTool) validateCommandSecurity(parsed *ParsedCommand) error {
 
 	// Check for shell escapes
 	if strings.Contains(fullCmd, ";") || strings.Contains(fullCmd, "&&") ||
-	   strings.Contains(fullCmd, "||") {
+		strings.Contains(fullCmd, "||") {
 		// Multiple commands - higher scrutiny
 		// This is where command injection often happens
 	}
@@ -375,14 +373,4 @@ func (t *ExecTool) SetTimeout(d time.Duration) {
 // SetMaxOutput sets the maximum output size.
 func (t *ExecTool) SetMaxOutput(n int) {
 	t.MaxOutput = n
-}
-
-// SetAllowedCmds sets the whitelist of allowed commands.
-func (t *ExecTool) SetAllowedCmds(cmds []string) {
-	t.AllowedCmds = cmds
-}
-
-// SetBlockedCmds sets the blacklist of blocked commands.
-func (t *ExecTool) SetBlockedCmds(cmds []string) {
-	t.BlockedCmds = cmds
 }

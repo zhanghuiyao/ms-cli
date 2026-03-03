@@ -5,254 +5,214 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
-	"sync"
 	"time"
 )
 
-// Item represents a single memory item.
+// Item represents a stored memory item.
 type Item struct {
-	Key       string    `json:"key"`
-	Value     string    `json:"value"`
-	Category  string    `json:"category"`
-	Tags      []string  `json:"tags"`
-	CreatedAt time.Time `json:"created_at"`
-	Accessed  time.Time `json:"accessed"`
-	AccessCount int     `json:"access_count"`
+	ID        string            `json:"id"`
+	Content   string            `json:"content"`
+	Type      string            `json:"type"` // e.g., "fact", "preference", "context"
+	Tags      []string          `json:"tags"`
+	Metadata  map[string]string `json:"metadata"`
+	CreatedAt time.Time         `json:"created_at"`
+	ExpiresAt *time.Time        `json:"expires_at,omitempty"`
 }
 
-// FileStore implements Store interface with JSON file persistence.
-type FileStore struct {
-	path      string
-	maxItems  int
-	maxBytes  int
-	ttlHours  int
-
-	data map[string]*Item
-	mu   sync.RWMutex
+// IsExpired checks if the memory item has expired.
+func (i *Item) IsExpired() bool {
+	if i.ExpiresAt == nil {
+		return false
+	}
+	return time.Now().After(*i.ExpiresAt)
 }
 
-// NewFileStore creates a new file-based memory store.
-func NewFileStore(path string) (*FileStore, error) {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("create memory directory: %w", err)
-	}
+// Store handles memory persistence.
+type Store struct {
+	baseDir string
+	maxSize int
+}
 
-	s := &FileStore{
-		path:     path,
-		maxItems: 1000,
-		maxBytes: 10 * 1024 * 1024, // 10MB
-		ttlHours: 168,              // 7 days
-		data:     make(map[string]*Item),
+// NewStore creates a new memory store.
+func NewStore(baseDir string) (*Store, error) {
+	if err := os.MkdirAll(baseDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create memory directory: %w", err)
 	}
+	
+	return &Store{
+		baseDir: baseDir,
+		maxSize: 1000, // Default max items
+	}, nil
+}
 
-	// Load existing data
-	if _, err := os.Stat(path); err == nil {
-		if err := s.load(); err != nil {
-			return nil, fmt.Errorf("load memory: %w", err)
+// Save stores a memory item.
+func (s *Store) Save(item *Item) error {
+	if item.ID == "" {
+		item.ID = generateMemoryID()
+	}
+	if item.CreatedAt.IsZero() {
+		item.CreatedAt = time.Now()
+	}
+	
+	path := filepath.Join(s.baseDir, item.ID+".json")
+	
+	data, err := json.MarshalIndent(item, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal memory: %w", err)
+	}
+	
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("failed to write memory: %w", err)
+	}
+	
+	return nil
+}
+
+// Load retrieves a memory item by ID.
+func (s *Store) Load(id string) (*Item, error) {
+	path := filepath.Join(s.baseDir, id+".json")
+	
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("memory not found: %s", id)
 		}
+		return nil, fmt.Errorf("failed to read memory: %w", err)
 	}
-
-	return s, nil
-}
-
-// SetMaxItems sets maximum number of items.
-func (s *FileStore) SetMaxItems(n int) {
-	s.maxItems = n
-}
-
-// SetMaxBytes sets maximum storage size.
-func (s *FileStore) SetMaxBytes(n int) {
-	s.maxBytes = n
-}
-
-// SetTTL sets item TTL in hours.
-func (s *FileStore) SetTTL(hours int) {
-	s.ttlHours = hours
-}
-
-// Put stores a value by key.
-func (s *FileStore) Put(key, value string) error {
-	return s.PutWithCategory(key, value, "general", nil)
-}
-
-// PutWithCategory stores a value with category and tags.
-func (s *FileStore) PutWithCategory(key, value, category string, tags []string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	now := time.Now()
-	s.data[key] = &Item{
-		Key:         key,
-		Value:       value,
-		Category:    category,
-		Tags:        tags,
-		CreatedAt:   now,
-		Accessed:    now,
-		AccessCount: 0,
+	
+	var item Item
+	if err := json.Unmarshal(data, &item); err != nil {
+		return nil, fmt.Errorf("failed to parse memory: %w", err)
 	}
-
-	// Enforce limits
-	s.enforceLimits()
-
-	// Persist
-	return s.save()
+	
+	return &item, nil
 }
 
-// Get retrieves a value by key.
-func (s *FileStore) Get(key string) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	item, ok := s.data[key]
-	if !ok {
-		return "", fmt.Errorf("key not found: %s", key)
+// Search finds memories matching the query.
+func (s *Store) Search(query string, tags []string) ([]*Item, error) {
+	entries, err := os.ReadDir(s.baseDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list memories: %w", err)
 	}
-
-	// Check TTL
-	if s.ttlHours > 0 {
-		maxAge := time.Duration(s.ttlHours) * time.Hour
-		if time.Since(item.CreatedAt) > maxAge {
-			delete(s.data, key)
-			s.save()
-			return "", fmt.Errorf("key expired: %s", key)
+	
+	var results []*Item
+	
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
 		}
-	}
-
-	// Update access stats
-	item.Accessed = time.Now()
-	item.AccessCount++
-
-	return item.Value, nil
-}
-
-// Search finds items matching query.
-func (s *FileStore) Search(query string, limit int) ([]RetrieveResult, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	query = strings.ToLower(query)
-	var matches []RetrieveResult
-
-	for _, item := range s.data {
-		// Check TTL
-		if s.ttlHours > 0 {
-			maxAge := time.Duration(s.ttlHours) * time.Hour
-			if time.Since(item.CreatedAt) > maxAge {
-				continue // Skip expired
+		
+		item, err := s.Load(entry.Name()[:len(entry.Name())-5])
+		if err != nil {
+			continue
+		}
+		
+		// Skip expired items
+		if item.IsExpired() {
+			continue
+		}
+		
+		// Match query
+		if query != "" {
+			if !contains(item.Content, query) {
+				continue
 			}
 		}
-
-		score := 0
-		if strings.Contains(strings.ToLower(item.Key), query) {
-			score += 10
-		}
-		if strings.Contains(strings.ToLower(item.Value), query) {
-			score += 5
-		}
-		if strings.Contains(strings.ToLower(item.Category), query) {
-			score += 3
-		}
-		for _, tag := range item.Tags {
-			if strings.Contains(strings.ToLower(tag), query) {
-				score += 7
+		
+		// Match tags
+		if len(tags) > 0 {
+			if !hasAnyTag(item.Tags, tags) {
+				continue
 			}
 		}
-
-		if score > 0 {
-			matches = append(matches, RetrieveResult{
-				Key:   item.Key,
-				Value: item.Value,
-				Score: score,
-			})
-		}
+		
+		results = append(results, item)
 	}
-
-	// Sort by score descending
-	sort.Slice(matches, func(i, j int) bool {
-		return matches[i].Score > matches[j].Score
-	})
-
-	if limit > 0 && len(matches) > limit {
-		matches = matches[:limit]
-	}
-
-	return matches, nil
+	
+	return results, nil
 }
 
-// Delete removes a key.
-func (s *FileStore) Delete(key string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	delete(s.data, key)
-	return s.save()
+// Delete removes a memory item.
+func (s *Store) Delete(id string) error {
+	path := filepath.Join(s.baseDir, id+".json")
+	return os.Remove(path)
 }
 
-// List returns all keys.
-func (s *FileStore) List() []string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	keys := make([]string, 0, len(s.data))
-	for key := range s.data {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
-// enforceLimits removes old items if limits exceeded.
-func (s *FileStore) enforceLimits() {
-	// Remove expired items first
-	if s.ttlHours > 0 {
-		maxAge := time.Duration(s.ttlHours) * time.Hour
-		for key, item := range s.data {
-			if time.Since(item.CreatedAt) > maxAge {
-				delete(s.data, key)
-			}
-		}
-	}
-
-	// Remove oldest if too many items
-	if s.maxItems > 0 && len(s.data) > s.maxItems {
-		type kv struct {
-			key   string
-			item  *Item
-		}
-		items := make([]kv, 0, len(s.data))
-		for k, v := range s.data {
-			items = append(items, kv{k, v})
-		}
-		sort.Slice(items, func(i, j int) bool {
-			return items[i].item.Accessed.Before(items[j].item.Accessed)
-		})
-
-		toRemove := len(s.data) - s.maxItems
-		for i := 0; i < toRemove; i++ {
-			delete(s.data, items[i].key)
-		}
-	}
-}
-
-// save persists to disk.
-func (s *FileStore) save() error {
-	data, err := json.MarshalIndent(s.data, "", "  ")
+// Cleanup removes expired memory items.
+func (s *Store) Cleanup() error {
+	entries, err := os.ReadDir(s.baseDir)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.path, data, 0644)
-}
-
-// load reads from disk.
-func (s *FileStore) load() error {
-	data, err := os.ReadFile(s.path)
-	if err != nil {
-		return err
+	
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		
+		id := entry.Name()[:len(entry.Name())-5]
+		item, err := s.Load(id)
+		if err != nil {
+			continue
+		}
+		
+		if item.IsExpired() {
+			s.Delete(id)
+		}
 	}
-	return json.Unmarshal(data, &s.data)
+	
+	return nil
 }
 
-// RetrieveResult is defined in retrieve.go
+// Helper functions
+
+func generateMemoryID() string {
+	return fmt.Sprintf("mem-%d", time.Now().UnixNano())
+}
+
+func contains(s, substr string) bool {
+	return len(substr) == 0 || len(s) > 0 && containsIgnoreCase(s, substr)
+}
+
+func containsIgnoreCase(s, substr string) bool {
+	return len(s) >= len(substr) && 
+		   (s == substr || 
+		    findSubstrIgnoreCase(s, substr) >= 0)
+}
+
+func findSubstrIgnoreCase(s, substr string) int {
+	// Simple case-insensitive search
+	sLower := toLower(s)
+	subLower := toLower(substr)
+	
+	for i := 0; i <= len(sLower)-len(subLower); i++ {
+		if sLower[i:i+len(subLower)] == subLower {
+			return i
+		}
+	}
+	return -1
+}
+
+func toLower(s string) string {
+	// Simple ASCII lowercase
+	result := make([]byte, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= 'A' && c <= 'Z' {
+			c = c + ('a' - 'A')
+		}
+		result[i] = c
+	}
+	return string(result)
+}
+
+func hasAnyTag(itemTags, queryTags []string) bool {
+	for _, qt := range queryTags {
+		for _, it := range itemTags {
+			if it == qt {
+				return true
+			}
+		}
+	}
+	return false
+}

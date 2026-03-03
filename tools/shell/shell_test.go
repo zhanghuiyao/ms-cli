@@ -70,8 +70,8 @@ func TestExecToolTimeout(t *testing.T) {
 	if result.Success {
 		t.Error("expected failure due to timeout")
 	}
-	if result.Error == nil {
-		t.Error("expected timeout error in result")
+	if result.Output == "" {
+		t.Error("expected timeout error message in result output")
 	}
 }
 
