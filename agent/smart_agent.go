@@ -356,17 +356,21 @@ func (a *SmartAgent) executeToolCall(ctx context.Context, tc llm.ToolCall) (loop
 		resultContent = fmt.Sprintf("Error: %v", err)
 	} else if result.Success {
 		resultContent = result.Output
-	} else if result.Error != nil {
-		resultContent = fmt.Sprintf("Error: %v", result.Error)
 	} else {
-		resultContent = "No output"
+		resultContent = "Operation failed"
 	}
 
 	// Add to context
 	a.context.AddMessage("tool", fmt.Sprintf("%s result:\n%s", tc.Function.Name, resultContent))
 
 	// Return event
-	if err != nil || !result.Success {
+	if err != nil {
+		return loop.Event{
+			Type:    "action_error",
+			Message: resultContent,
+		}, false
+	}
+	if !result.Success {
 		return loop.Event{
 			Type:    "action_error",
 			Message: resultContent,

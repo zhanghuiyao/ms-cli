@@ -66,7 +66,7 @@ func (t *ExecTool) Execute(ctx context.Context, params map[string]any) (tools.Re
 
 	// Check risk level
 	risk := t.assessRisk(parsed)
-	
+
 	// Log attempt
 	if t.AuditLog != nil {
 		t.AuditLog(command, false, fmt.Errorf("risk level: %v", risk))
@@ -98,10 +98,10 @@ func (t *ExecTool) Execute(ctx context.Context, params map[string]any) (tools.Re
 
 	// Prepare command - use explicit shell path
 	cmd := exec.CommandContext(execCtx, "/bin/sh", "-c", command)
-	
+
 	// Set up environment
 	cmd.Env = t.buildEnv()
-	
+
 	// Capture output
 	var output strings.Builder
 	stdout, err := cmd.StdoutPipe()
@@ -120,7 +120,7 @@ func (t *ExecTool) Execute(ctx context.Context, params map[string]any) (tools.Re
 
 	// Stream output with scanner
 	done := make(chan bool, 2)
-	
+
 	go func() {
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
@@ -158,15 +158,18 @@ func (t *ExecTool) Execute(ctx context.Context, params map[string]any) (tools.Re
 
 	// Wait for command to finish
 	err = cmd.Wait()
-	
+
 	exitCode := 0
 	if err != nil {
+		// Check for timeout first
+		if execCtx.Err() == context.DeadlineExceeded {
+			return tools.Result{Success: false, Error: fmt.Errorf("command timed out after %v", t.Timeout)}, nil
+		}
+		
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
 				exitCode = status.ExitStatus()
 			}
-		} else if execCtx.Err() == context.DeadlineExceeded {
-			return tools.Result{Success: false, Error: fmt.Errorf("command timed out after %v", t.Timeout)}, nil
 		} else {
 			return tools.Result{Success: false, Error: fmt.Errorf("command failed: %w", err)}, nil
 		}
@@ -241,7 +244,7 @@ func (t *ExecTool) parseCommand(cmd string) (*ParsedCommand, error) {
 	// Extract base command (first token before space, pipe, or redirect)
 	// Handle quoted strings
 	cmd = strings.TrimSpace(cmd)
-	
+
 	// Remove common shell prefixes that might be used to bypass checks
 	prefixes := []string{"sh -c ", "bash -c ", "sh ", "bash "}
 	for _, prefix := range prefixes {
@@ -342,7 +345,7 @@ func (t *ExecTool) validateCommandSecurity(parsed *ParsedCommand) error {
 	// Check for encoded dangerous patterns
 	encodedPatterns := []string{
 		`\$\(.*\)`,      // Command substitution $(...)
-		`\`.*\``,        // Backtick command substitution
+		"`.*`",          // Backtick command substitution
 		`\$\{.*\}`,      // Variable expansion with default values
 	}
 
@@ -355,7 +358,7 @@ func (t *ExecTool) validateCommandSecurity(parsed *ParsedCommand) error {
 	}
 
 	// Check for shell escapes
-	if strings.Contains(fullCmd, ";") || strings.Contains(fullCmd, "&&") || 
+	if strings.Contains(fullCmd, ";") || strings.Contains(fullCmd, "&&") ||
 	   strings.Contains(fullCmd, "||") {
 		// Multiple commands - higher scrutiny
 		// This is where command injection often happens
