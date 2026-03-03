@@ -126,25 +126,25 @@ func (r *Runner) Execute(task loop.Task, eventCh chan<- model.Event) error {
 	return r.executeWithRuleAgent(task, eventCh)
 }
 
-// executeWithLLM uses the smart agent with LLM.
+// executeWithLLM uses the new ReAct engine with LLM.
 func (r *Runner) executeWithLLM(task loop.Task, eventCh chan<- model.Event) error {
-	// Create smart agent
-	smartAgent := agent.NewSmartAgent(r.provider, r.registry)
-	smartAgent.SetMaxSteps(15)
+	// Create ReAct engine
+	engine := loop.NewReActEngine(r.provider, r.registry)
+	engine.SetMaxIterations(15)
 
-	// Run the agent
-	events, err := smartAgent.Run(task)
+	// Execute and stream events
+	eventChResult, err := engine.Execute(task)
 	if err != nil {
 		eventCh <- model.Event{
 			Type:     model.ToolError,
-			ToolName: "SmartAgent",
+			ToolName: "ReActEngine",
 			Message:  fmt.Sprintf("execution failed: %v", err),
 		}
 		return err
 	}
 
-	// Convert and emit events
-	for _, ev := range events {
+	// Forward events to UI
+	for ev := range eventChResult {
 		uiEvent := convertEvent(ev)
 		eventCh <- uiEvent
 	}
