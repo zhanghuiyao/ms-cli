@@ -12,7 +12,9 @@ import (
 )
 
 // ReadTool implements file reading functionality.
-type ReadTool struct{}
+type ReadTool struct {
+	WorkDir string // Base directory for path validation
+}
 
 func (t *ReadTool) Name() string        { return "fs_read" }
 func (t *ReadTool) Description() string { return "Read the contents of a file" }
@@ -24,12 +26,17 @@ func (t *ReadTool) Execute(ctx context.Context, params map[string]any) (tools.Re
 	}
 
 	// Security: prevent directory traversal
-	path = filepath.Clean(path)
-	if strings.Contains(path, "..") {
-		return tools.Result{Success: false, Error: fmt.Errorf("invalid path: directory traversal not allowed")}, nil
+	baseDir := t.WorkDir
+	if baseDir == "" {
+		baseDir = GetWorkDir()
+	}
+	
+	securePath, err := SecurePath(path, baseDir)
+	if err != nil {
+		return tools.Result{Success: false, Error: fmt.Errorf("security check failed: %w", err)}, nil
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(securePath)
 	if err != nil {
 		return tools.Result{Success: false, Error: fmt.Errorf("read file: %w", err)}, nil
 	}
@@ -38,7 +45,7 @@ func (t *ReadTool) Execute(ctx context.Context, params map[string]any) (tools.Re
 		Success: true,
 		Output:  string(data),
 		Data: map[string]any{
-			"path":     path,
+			"path":     securePath,
 			"size":     len(data),
 			"lines":    strings.Count(string(data), "\n") + 1,
 		},
@@ -72,7 +79,9 @@ func ReadDefinition() tools.Definition {
 }
 
 // WriteTool implements file writing functionality.
-type WriteTool struct{}
+type WriteTool struct {
+	WorkDir string // Base directory for path validation
+}
 
 func (t *WriteTool) Name() string        { return "fs_write" }
 func (t *WriteTool) Description() string { return "Write content to a file" }
@@ -86,35 +95,40 @@ func (t *WriteTool) Execute(ctx context.Context, params map[string]any) (tools.R
 	}
 
 	// Security check
-	path = filepath.Clean(path)
-	if strings.Contains(path, "..") {
-		return tools.Result{Success: false, Error: fmt.Errorf("invalid path: directory traversal not allowed")}, nil
+	baseDir := t.WorkDir
+	if baseDir == "" {
+		baseDir = GetWorkDir()
+	}
+
+	securePath, err := SecurePath(path, baseDir)
+	if err != nil {
+		return tools.Result{Success: false, Error: fmt.Errorf("security check failed: %w", err)}, nil
 	}
 
 	// Create parent directories if needed
-	dir := filepath.Dir(path)
+	dir := filepath.Dir(securePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return tools.Result{Success: false, Error: fmt.Errorf("create directory: %w", err)}, nil
 	}
 
 	// Check if file exists for diff
 	var oldContent string
-	if data, err := os.ReadFile(path); err == nil {
+	if data, err := os.ReadFile(securePath); err == nil {
 		oldContent = string(data)
 	}
 
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(securePath, []byte(content), 0644); err != nil {
 		return tools.Result{Success: false, Error: fmt.Errorf("write file: %w", err)}, nil
 	}
 
 	// Generate diff for display
-	diff := generateDiff(oldContent, content, path)
+	diff := generateDiff(oldContent, content, securePath)
 
 	return tools.Result{
 		Success: true,
 		Output:  diff,
 		Data: map[string]any{
-			"path":    path,
+			"path":    securePath,
 			"created": oldContent == "",
 			"size":    len(content),
 		},
@@ -144,7 +158,9 @@ func WriteDefinition() tools.Definition {
 }
 
 // EditTool implements file editing (find/replace) functionality.
-type EditTool struct{}
+type EditTool struct {
+	WorkDir string // Base directory for path validation
+}
 
 func (t *EditTool) Name() string        { return "fs_edit" }
 func (t *EditTool) Description() string { return "Edit a file by replacing exact text" }
@@ -159,12 +175,17 @@ func (t *EditTool) Execute(ctx context.Context, params map[string]any) (tools.Re
 	}
 
 	// Security check
-	path = filepath.Clean(path)
-	if strings.Contains(path, "..") {
-		return tools.Result{Success: false, Error: fmt.Errorf("invalid path: directory traversal not allowed")}, nil
+	baseDir := t.WorkDir
+	if baseDir == "" {
+		baseDir = GetWorkDir()
 	}
 
-	data, err := os.ReadFile(path)
+	securePath, err := SecurePath(path, baseDir)
+	if err != nil {
+		return tools.Result{Success: false, Error: fmt.Errorf("security check failed: %w", err)}, nil
+	}
+
+	data, err := os.ReadFile(securePath)
 	if err != nil {
 		return tools.Result{Success: false, Error: fmt.Errorf("read file: %w", err)}, nil
 	}
@@ -175,17 +196,17 @@ func (t *EditTool) Execute(ctx context.Context, params map[string]any) (tools.Re
 	}
 
 	newContent := strings.Replace(content, oldText, newText, 1)
-	if err := os.WriteFile(path, []byte(newContent), 0644); err != nil {
+	if err := os.WriteFile(securePath, []byte(newContent), 0644); err != nil {
 		return tools.Result{Success: false, Error: fmt.Errorf("write file: %w", err)}, nil
 	}
 
-	diff := generateDiff(content, newContent, path)
+	diff := generateDiff(content, newContent, securePath)
 
 	return tools.Result{
 		Success: true,
 		Output:  diff,
 		Data: map[string]any{
-			"path":       path,
+			"path":         securePath,
 			"replacements": 1,
 		},
 	}, nil

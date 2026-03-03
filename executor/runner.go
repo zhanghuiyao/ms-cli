@@ -25,15 +25,29 @@ type Runner struct {
 
 // NewRunner creates a new executor with all tools registered.
 func NewRunner() *Runner {
+	return NewRunnerWithWorkDir("")
+}
+
+// NewRunnerWithWorkDir creates a new executor with a specific working directory for security.
+func NewRunnerWithWorkDir(workDir string) *Runner {
+	if workDir == "" {
+		wd, err := os.Getwd()
+		if err == nil {
+			workDir = wd
+		} else {
+			workDir = "."
+		}
+	}
+
 	r := &Runner{
 		registry: tools.NewRegistry(),
 		useLLM:   false,
 	}
 
-	// Register all file system tools
-	r.registry.Register(&fs.ReadTool{})
-	r.registry.Register(&fs.WriteTool{})
-	r.registry.Register(&fs.EditTool{})
+	// Register all file system tools with work directory for security
+	r.registry.Register(&fs.ReadTool{WorkDir: workDir})
+	r.registry.Register(&fs.WriteTool{WorkDir: workDir})
+	r.registry.Register(&fs.EditTool{WorkDir: workDir})
 	r.registry.Register(&fs.GlobTool{})
 	r.registry.Register(&fs.GrepTool{})
 
