@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vigo999/ms-cli/agent/context"
+	ctxmanager "github.com/vigo999/ms-cli/agent/context"
 	"github.com/vigo999/ms-cli/agent/permission"
 	"github.com/vigo999/ms-cli/integrations/llm"
 	"github.com/vigo999/ms-cli/tools"
@@ -32,9 +32,9 @@ type Action struct {
 type ReActEngine struct {
 	provider   llm.Provider
 	registry   *tools.Registry
-	ctxManager *context.Manager
+	ctxManager *ctxmanager.Manager
 	permission *permission.Service
-	
+
 	maxIterations int
 	timeout       time.Duration
 	systemPrompt  string
@@ -45,7 +45,7 @@ func NewReActEngine(provider llm.Provider, registry *tools.Registry) *ReActEngin
 	e := &ReActEngine{
 		provider:      provider,
 		registry:      registry,
-		ctxManager:    context.NewManager(128000),
+		ctxManager:    ctxmanager.NewManager(128000),
 		maxIterations: 15,
 		timeout:       5 * time.Minute,
 	}
@@ -77,7 +77,7 @@ When given a task:
 
 You have access to the following tools:
 - fs_read: Read file contents
-- fs_write: Write/create files  
+- fs_write: Write/create files
 - fs_edit: Edit files by replacing text
 - fs_glob: Find files matching patterns
 - fs_grep: Search text in files
@@ -157,7 +157,7 @@ func (e *ReActEngine) Execute(task Task) (<-chan Event, error) {
 				}
 
 				observation, err := e.act(ctx, action)
-				
+
 				step := Step{
 					Number:      i,
 					Thought:     thought,
@@ -168,7 +168,7 @@ func (e *ReActEngine) Execute(task Task) (<-chan Event, error) {
 				steps = append(steps, step)
 
 				// Add to context for next iteration
-				e.ctxManager.AddMessage("assistant", fmt.Sprintf("Thought: %s\nAction: %s\nObservation: %s", 
+				e.ctxManager.AddMessage("assistant", fmt.Sprintf("Thought: %s\nAction: %s\nObservation: %s",
 					thought, action.Tool, observation))
 
 				if err != nil {
@@ -198,7 +198,7 @@ func (e *ReActEngine) Execute(task Task) (<-chan Event, error) {
 func (e *ReActEngine) think(ctx context.Context, steps []Step) (thought string, action *Action, final bool, err error) {
 	// Build messages from context
 	messages := e.buildMessages()
-	
+
 	// Add tool definitions
 	toolDefs := e.buildToolDefinitions()
 
@@ -221,21 +221,21 @@ func (e *ReActEngine) think(ctx context.Context, steps []Step) (thought string, 
 	}
 
 	content := resp.Choices[0].Message.Content
-	
+
 	// Check for tool calls
 	if len(resp.Choices[0].ToolCalls) > 0 {
 		tc := resp.Choices[0].ToolCalls[0]
 		action = &Action{
 			Tool: tc.Function.Name,
 		}
-		
+
 		// Parse arguments
 		var params map[string]any
 		if err := json.Unmarshal([]byte(tc.Function.Arguments), &params); err != nil {
 			return "", nil, false, fmt.Errorf("failed to parse tool arguments: %w", err)
 		}
 		action.Params = params
-		
+
 		// Extract thought from content (before tool call)
 		thought = e.extractThought(content)
 		return thought, action, false, nil
@@ -287,14 +287,14 @@ func (e *ReActEngine) act(ctx context.Context, action *Action) (string, error) {
 func (e *ReActEngine) buildMessages() []llm.Message {
 	ctxMsgs := e.ctxManager.BuildMessages()
 	messages := make([]llm.Message, 0, len(ctxMsgs))
-	
+
 	for _, msg := range ctxMsgs {
 		messages = append(messages, llm.Message{
 			Role:    msg.Role,
 			Content: msg.Content,
 		})
 	}
-	
+
 	return messages
 }
 
@@ -382,22 +382,22 @@ func (e *ReActEngine) buildToolDefinitions() []llm.ToolDefinition {
 			},
 		},
 	}
-	
+
 	return defs
 }
 
 // extractThought extracts the thought from LLM response.
 func (e *ReActEngine) extractThought(content string) string {
 	content = strings.TrimSpace(content)
-	
+
 	// Remove "Thought:" prefix if present
 	content = strings.TrimPrefix(content, "Thought:")
 	content = strings.TrimSpace(content)
-	
+
 	// Extract just the thought part (before Action:)
 	if idx := strings.Index(content, "Action:"); idx > 0 {
 		content = content[:idx]
 	}
-	
+
 	return strings.TrimSpace(content)
 }

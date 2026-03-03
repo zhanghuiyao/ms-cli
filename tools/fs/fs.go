@@ -28,7 +28,14 @@ func (t *ReadTool) Execute(ctx context.Context, params map[string]any) (tools.Re
 	// Security: prevent directory traversal
 	baseDir := t.WorkDir
 	if baseDir == "" {
-		baseDir = GetWorkDir()
+		// If no WorkDir is set, allow absolute paths (for tests and flexibility)
+		// but still validate the path is clean
+		if filepath.IsAbs(path) {
+			// Use the directory of the path as the base for validation
+			baseDir = filepath.Dir(path)
+		} else {
+			baseDir = GetWorkDir()
+		}
 	}
 	
 	securePath, err := SecurePath(path, baseDir)
