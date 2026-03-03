@@ -176,7 +176,7 @@ func TestReadTool_Security(t *testing.T) {
 				t.Errorf("expected security error for path %s, but succeeded", tt.path)
 			}
 			if !tt.wantError && !result.Success {
-				t.Errorf("expected success for path %s, but got error: %v", tt.path, result.Error)
+				t.Errorf("expected success for path %s, but got error: %v", tt.path, result.Output)
 			}
 		})
 	}

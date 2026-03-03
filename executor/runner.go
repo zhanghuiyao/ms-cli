@@ -74,6 +74,11 @@ func NewSmartRunnerWithProvider(provider, apiKey, endpoint string) *Runner {
 			endpoint = "https://api.anthropic.com/v1"
 		}
 		r.provider = llm.NewAnthropicProvider(apiKey, endpoint)
+	case "openrouter":
+		if endpoint == "" {
+			endpoint = "https://openrouter.ai/api/v1"
+		}
+		r.provider = llm.NewOpenRouterProvider(apiKey, endpoint)
 	case "openai", "gpt":
 		fallthrough
 	default:

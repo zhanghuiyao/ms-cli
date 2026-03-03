@@ -2,7 +2,6 @@ package config
 
 import (
 	"log"
-	"os"
 	"sync"
 
 	"github.com/fsnotify/fsnotify"

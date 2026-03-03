@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -12,15 +14,15 @@ func TestDefaultTheme(t *testing.T) {
 	}
 
 	// Verify all colors are set
-	if theme.Primary == "" {
+	if theme.Primary.Hex == "" {
 		t.Error("primary color should be set")
 	}
 
-	if theme.Success == "" {
+	if theme.Success.Hex == "" {
 		t.Error("success color should be set")
 	}
 
-	if theme.Error == "" {
+	if theme.Error.Hex == "" {
 		t.Error("error color should be set")
 	}
 }
@@ -41,48 +43,29 @@ func TestLightTheme(t *testing.T) {
 	}
 }
 
-func TestHighContrastTheme(t *testing.T) {
-	theme := HighContrastTheme()
+func TestLoadTheme(t *testing.T) {
+	// Skip this test if no theme file exists
+	tmpDir := t.TempDir()
+	themePath := filepath.Join(tmpDir, "test_theme.yaml")
 
-	if theme.Name != "high-contrast" {
-		t.Errorf("expected name 'high-contrast', got '%s'", theme.Name)
-	}
-}
-
-func TestGetTheme(t *testing.T) {
-	// Test existing theme
-	theme := GetTheme("dark")
-	if theme.Name != "dark" {
-		t.Errorf("expected dark theme, got '%s'", theme.Name)
-	}
-
-	// Test non-existent theme returns default
-	theme = GetTheme("nonexistent")
-	if theme.Name != "default" {
-		t.Errorf("expected default theme for unknown name, got '%s'", theme.Name)
-	}
-}
-
-func TestListThemes(t *testing.T) {
-	themes := ListThemes()
-
-	expectedThemes := []string{"default", "dark", "light", "high-contrast"}
-
-	if len(themes) != len(expectedThemes) {
-		t.Errorf("expected %d themes, got %d", len(expectedThemes), len(themes))
+	// Create a test theme file
+	themeContent := `name: test
+title: "Test Theme"
+primary: "#FF0000"
+secondary: "#00FF00"
+success: "#0000FF"
+error: "#FF00FF"
+`
+	if err := os.WriteFile(themePath, []byte(themeContent), 0644); err != nil {
+		t.Fatalf("failed to create test theme file: %v", err)
 	}
 
-	// Verify all expected themes exist
-	for _, expected := range expectedThemes {
-		found := false
-		for _, actual := range themes {
-			if actual == expected {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("expected theme '%s' not found", expected)
-		}
+	theme, err := LoadTheme(themePath)
+	if err != nil {
+		t.Errorf("unexpected error loading theme: %v", err)
+	}
+
+	if theme.Name != "test" {
+		t.Errorf("expected name 'test', got '%s'", theme.Name)
 	}
 }

@@ -33,12 +33,12 @@ func (t *ReadTool) Execute(ctx context.Context, params map[string]any) (tools.Re
 	
 	securePath, err := SecurePath(path, baseDir)
 	if err != nil {
-		return tools.Result{Success: false, Output: fmt.Sprintf("security check failed: %w", err)}, nil
+		return tools.Result{Success: false, Output: fmt.Sprintf("security check failed: %v", err)}, nil
 	}
 
 	data, err := os.ReadFile(securePath)
 	if err != nil {
-		return tools.Result{Success: false, Output: fmt.Sprintf("read file: %w", err)}, nil
+		return tools.Result{Success: false, Output: fmt.Sprintf("read file: %v", err)}, nil
 	}
 
 	return tools.Result{
@@ -102,13 +102,13 @@ func (t *WriteTool) Execute(ctx context.Context, params map[string]any) (tools.R
 
 	securePath, err := SecurePath(path, baseDir)
 	if err != nil {
-		return tools.Result{Success: false, Output: fmt.Sprintf("security check failed: %w", err)}, nil
+		return tools.Result{Success: false, Output: fmt.Sprintf("security check failed: %v", err)}, nil
 	}
 
 	// Create parent directories if needed
 	dir := filepath.Dir(securePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return tools.Result{Success: false, Output: fmt.Sprintf("create directory: %w", err)}, nil
+		return tools.Result{Success: false, Output: fmt.Sprintf("create directory: %v", err)}, nil
 	}
 
 	// Check if file exists for diff
@@ -118,7 +118,7 @@ func (t *WriteTool) Execute(ctx context.Context, params map[string]any) (tools.R
 	}
 
 	if err := os.WriteFile(securePath, []byte(content), 0644); err != nil {
-		return tools.Result{Success: false, Output: fmt.Sprintf("write file: %w", err)}, nil
+		return tools.Result{Success: false, Output: fmt.Sprintf("write file: %v", err)}, nil
 	}
 
 	// Generate diff for display
@@ -182,12 +182,12 @@ func (t *EditTool) Execute(ctx context.Context, params map[string]any) (tools.Re
 
 	securePath, err := SecurePath(path, baseDir)
 	if err != nil {
-		return tools.Result{Success: false, Output: fmt.Sprintf("security check failed: %w", err)}, nil
+		return tools.Result{Success: false, Output: fmt.Sprintf("security check failed: %v", err)}, nil
 	}
 
 	data, err := os.ReadFile(securePath)
 	if err != nil {
-		return tools.Result{Success: false, Output: fmt.Sprintf("read file: %w", err)}, nil
+		return tools.Result{Success: false, Output: fmt.Sprintf("read file: %v", err)}, nil
 	}
 
 	content := string(data)
@@ -197,7 +197,7 @@ func (t *EditTool) Execute(ctx context.Context, params map[string]any) (tools.Re
 
 	newContent := strings.Replace(content, oldText, newText, 1)
 	if err := os.WriteFile(securePath, []byte(newContent), 0644); err != nil {
-		return tools.Result{Success: false, Output: fmt.Sprintf("write file: %w", err)}, nil
+		return tools.Result{Success: false, Output: fmt.Sprintf("write file: %v", err)}, nil
 	}
 
 	diff := generateDiff(content, newContent, securePath)
@@ -252,7 +252,7 @@ func (t *GlobTool) Execute(ctx context.Context, params map[string]any) (tools.Re
 
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
-		return tools.Result{Success: false, Output: fmt.Sprintf("glob pattern: %w", err)}, nil
+		return tools.Result{Success: false, Output: fmt.Sprintf("glob pattern: %v", err)}, nil
 	}
 
 	output := strings.Join(matches, "\n")
@@ -336,7 +336,7 @@ func (t *GrepTool) Execute(ctx context.Context, params map[string]any) (tools.Re
 	})
 
 	if err != nil {
-		return tools.Result{Success: false, Output: fmt.Sprintf("walk directory: %w", err)}, nil
+		return tools.Result{Success: false, Output: fmt.Sprintf("walk directory: %v", err)}, nil
 	}
 
 	output := strings.Join(matches, "\n")
