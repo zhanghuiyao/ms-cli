@@ -1,10 +1,9 @@
 package agent
 
 import (
-	"context"
+	stdctx "context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/vigo999/ms-cli/agent/context"
@@ -82,7 +81,7 @@ Guidelines:
 
 // Run executes a task using LLM planning.
 func (a *SmartAgent) Run(task loop.Task) ([]loop.Event, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), a.timeout)
+	ctx, cancel := stdctx.WithTimeout(stdctx.Background(), a.timeout)
 	defer cancel()
 
 	events := make([]loop.Event, 0)
@@ -329,7 +328,7 @@ func (a *SmartAgent) buildToolDefinitions() []llm.ToolDefinition {
 }
 
 // executeToolCall executes a tool call from LLM.
-func (a *SmartAgent) executeToolCall(ctx context.Context, tc llm.ToolCall) (loop.Event, bool) {
+func (a *SmartAgent) executeToolCall(ctx stdctx.Context, tc llm.ToolCall) (loop.Event, bool) {
 	// Parse arguments
 	var params map[string]interface{}
 	if err := json.Unmarshal([]byte(tc.Function.Arguments), &params); err != nil {
