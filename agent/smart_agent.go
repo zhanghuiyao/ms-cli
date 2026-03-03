@@ -340,12 +340,6 @@ func (a *SmartAgent) executeToolCall(ctx stdctx.Context, tc llm.ToolCall) (loop.
 		}, false
 	}
 
-	// Emit action start
-	actionStart := loop.Event{
-		Type:    "action_start",
-		Message: fmt.Sprintf("%s: %s", tc.Function.Name, tc.Function.Arguments),
-	}
-
 	// Execute tool
 	result, err := a.registry.Execute(ctx, tc.Function.Name, params)
 

@@ -133,10 +133,8 @@ func (a *StreamingAgent) executeToolCallAndStream(ctx context.Context, tc llm.To
 		resultContent = fmt.Sprintf("Error: %v", err)
 	} else if result.Success {
 		resultContent = result.Output
-	} else if result.Error != nil {
-		resultContent = fmt.Sprintf("Error: %v", result.Error)
 	} else {
-		resultContent = "No output"
+		resultContent = result.Output
 	}
 
 	// Add to context

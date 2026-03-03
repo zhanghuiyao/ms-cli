@@ -38,12 +38,12 @@ func (t *WebSearchTool) Description() string { return "Search the web for inform
 func (t *WebSearchTool) Execute(ctx context.Context, params map[string]any) (tools.Result, error) {
 	query, ok := params["query"].(string)
 	if !ok || query == "" {
-		return tools.Result{Success: false, Error: fmt.Errorf("query parameter is required")}, nil
+		return tools.Result{Success: false, Output: "query parameter is required"}, nil
 	}
 
 	results, err := t.search(ctx, query)
 	if err != nil {
-		return tools.Result{Success: false, Error: err}, nil
+		return tools.Result{Success: false, Output: err.Error()}, nil
 	}
 
 	// Format results
@@ -62,7 +62,7 @@ func (t *WebSearchTool) Execute(ctx context.Context, params map[string]any) (too
 
 // WebSearchDefinition returns the schema for web_search.
 func WebSearchDefinition() tools.Definition {
-	return Definition{
+	return tools.Definition{
 		Name:        "web_search",
 		Description: "Search the web for current information. Returns titles, URLs, and snippets.",
 		Parameters: tools.Parameters{

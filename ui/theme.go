@@ -1,143 +1,121 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/charmbracelet/lipgloss"
+	"gopkg.in/yaml.v3"
 )
 
 // Theme defines the color scheme for the UI.
 type Theme struct {
-	Name string
-
-	// Primary colors
-	Primary   lipgloss.Color
-	Secondary lipgloss.Color
-
-	// Background colors
-	Background lipgloss.Color
-	Surface    lipgloss.Color
-
-	// Text colors
-	TextPrimary   lipgloss.Color
-	TextSecondary lipgloss.Color
-	TextMuted     lipgloss.Color
-
-	// Status colors
-	Success lipgloss.Color
-	Warning lipgloss.Color
-	Error   lipgloss.Color
-	Info    lipgloss.Color
-
-	// Accent colors
-	Accent1 lipgloss.Color
-	Accent2 lipgloss.Color
-	Accent3 lipgloss.Color
+	Name       string     `yaml:"name"`
+	Primary    Color      `yaml:"primary"`
+	Secondary  Color      `yaml:"secondary"`
+	Success    Color      `yaml:"success"`
+	Error      Color      `yaml:"error"`
+	Warning    Color      `yaml:"warning"`
+	Info       Color      `yaml:"info"`
+	Background Color      `yaml:"background"`
+	Foreground Color      `yaml:"foreground"`
+	Muted      Color      `yaml:"muted"`
+	Border     Color      `yaml:"border"`
 }
 
-// Themes is a collection of available themes.
-var Themes = map[string]Theme{
-	"default": DefaultTheme(),
-	"dark":    DarkTheme(),
-	"light":   LightTheme(),
-	"high-contrast": HighContrastTheme(),
+// Color represents a color in the theme.
+type Color struct {
+	Hex string `yaml:"hex"`
+	lipgloss.Color
 }
 
-// DefaultTheme returns the default dark theme.
+// UnmarshalYAML implements custom YAML unmarshaling.
+func (c *Color) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var hex string
+	if err := unmarshal(&hex); err != nil {
+		return err
+	}
+	c.Hex = hex
+	c.Color = lipgloss.Color(hex)
+	return nil
+}
+
+// DefaultTheme returns the default theme.
 func DefaultTheme() Theme {
 	return Theme{
-		Name:          "default",
-		Primary:       lipgloss.Color("86"),   // Cyan
-		Secondary:     lipgloss.Color("244"),  // Gray
-		Background:    lipgloss.Color("0"),    // Black
-		Surface:       lipgloss.Color("235"),  // Dark gray
-		TextPrimary:   lipgloss.Color("252"),  // White
-		TextSecondary: lipgloss.Color("250"),  // Light gray
-		TextMuted:     lipgloss.Color("240"),  // Muted gray
-		Success:       lipgloss.Color("114"),  // Green
-		Warning:       lipgloss.Color("214"),  // Orange
-		Error:         lipgloss.Color("196"),  // Red
-		Info:          lipgloss.Color("39"),   // Blue
-		Accent1:       lipgloss.Color("205"),  // Pink
-		Accent2:       lipgloss.Color("39"),   // Blue
-		Accent3:       lipgloss.Color("214"),  // Orange
+		Name:       "default",
+		Primary:    Color{Hex: "#7B68EE", Color: lipgloss.Color("#7B68EE")},
+		Secondary:  Color{Hex: "#00CED1", Color: lipgloss.Color("#00CED1")},
+		Success:    Color{Hex: "#32CD32", Color: lipgloss.Color("#32CD32")},
+		Error:      Color{Hex: "#DC143C", Color: lipgloss.Color("#DC143C")},
+		Warning:    Color{Hex: "#FFD700", Color: lipgloss.Color("#FFD700")},
+		Info:       Color{Hex: "#1E90FF", Color: lipgloss.Color("#1E90FF")},
+		Background: Color{Hex: "#000000", Color: lipgloss.Color("#000000")},
+		Foreground: Color{Hex: "#FFFFFF", Color: lipgloss.Color("#FFFFFF")},
+		Muted:      Color{Hex: "#808080", Color: lipgloss.Color("#808080")},
+		Border:     Color{Hex: "#444444", Color: lipgloss.Color("#444444")},
 	}
 }
 
-// DarkTheme returns a darker variant.
+// DarkTheme returns a dark theme variant.
 func DarkTheme() Theme {
-	return Theme{
-		Name:          "dark",
-		Primary:       lipgloss.Color("81"),   // Light blue
-		Secondary:     lipgloss.Color("245"),  // Gray
-		Background:    lipgloss.Color("232"),  // Almost black
-		Surface:       lipgloss.Color("236"),  // Dark gray
-		TextPrimary:   lipgloss.Color("255"),  // White
-		TextSecondary: lipgloss.Color("251"),  // Light gray
-		TextMuted:     lipgloss.Color("241"),  // Muted gray
-		Success:       lipgloss.Color("82"),   // Bright green
-		Warning:       lipgloss.Color("220"),  // Yellow
-		Error:         lipgloss.Color("203"),  // Light red
-		Info:          lipgloss.Color("33"),   // Cyan
-		Accent1:       lipgloss.Color("183"),  // Light purple
-		Accent2:       lipgloss.Color("33"),   // Cyan
-		Accent3:       lipgloss.Color("215"),  // Light orange
-	}
+	t := DefaultTheme()
+	t.Name = "dark"
+	return t
 }
 
 // LightTheme returns a light theme.
 func LightTheme() Theme {
 	return Theme{
-		Name:          "light",
-		Primary:       lipgloss.Color("25"),   // Blue
-		Secondary:     lipgloss.Color("240"),  // Gray
-		Background:    lipgloss.Color("255"),  // White
-		Surface:       lipgloss.Color("253"),  // Light gray
-		TextPrimary:   lipgloss.Color("16"),   // Black
-		TextSecondary: lipgloss.Color("238"),  // Dark gray
-		TextMuted:     lipgloss.Color("245"),  // Gray
-		Success:       lipgloss.Color("28"),   // Green
-		Warning:       lipgloss.Color("166"),  // Orange
-		Error:         lipgloss.Color("160"),  // Red
-		Info:          lipgloss.Color("25"),   // Blue
-		Accent1:       lipgloss.Color("162"),  // Purple
-		Accent2:       lipgloss.Color("31"),   // Teal
-		Accent3:       lipgloss.Color("130"),  // Brown
+		Name:       "light",
+		Primary:    Color{Hex: "#5B4FC4", Color: lipgloss.Color("#5B4FC4")},
+		Secondary:  Color{Hex: "#008B8B", Color: lipgloss.Color("#008B8B")},
+		Success:    Color{Hex: "#228B22", Color: lipgloss.Color("#228B22")},
+		Error:      Color{Hex: "#B22222", Color: lipgloss.Color("#B22222")},
+		Warning:    Color{Hex: "#DAA520", Color: lipgloss.Color("#DAA520")},
+		Info:       Color{Hex: "#4169E1", Color: lipgloss.Color("#4169E1")},
+		Background: Color{Hex: "#FFFFFF", Color: lipgloss.Color("#FFFFFF")},
+		Foreground: Color{Hex: "#000000", Color: lipgloss.Color("#000000")},
+		Muted:      Color{Hex: "#696969", Color: lipgloss.Color("#696969")},
+		Border:     Color{Hex: "#CCCCCC", Color: lipgloss.Color("#CCCCCC")},
 	}
 }
 
-// HighContrastTheme returns a high contrast theme for accessibility.
-func HighContrastTheme() Theme {
-	return Theme{
-		Name:          "high-contrast",
-		Primary:       lipgloss.Color("51"),   // Bright cyan
-		Secondary:     lipgloss.Color("250"),  // White
-		Background:    lipgloss.Color("0"),    // Black
-		Surface:       lipgloss.Color("0"),    // Black
-		TextPrimary:   lipgloss.Color("15"),   // White
-		TextSecondary: lipgloss.Color("250"),  // Light gray
-		TextMuted:     lipgloss.Color("248"),  // Gray
-		Success:       lipgloss.Color("46"),   // Bright green
-		Warning:       lipgloss.Color("226"),  // Bright yellow
-		Error:         lipgloss.Color("196"),  // Bright red
-		Info:          lipgloss.Color("51"),   // Bright cyan
-		Accent1:       lipgloss.Color("213"),  // Bright pink
-		Accent2:       lipgloss.Color("51"),   // Bright cyan
-		Accent3:       lipgloss.Color("220"),  // Bright yellow
+// LoadTheme loads a theme from a YAML file.
+func LoadTheme(path string) (Theme, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Theme{}, err
 	}
+	
+	var theme Theme
+	if err := yaml.Unmarshal(data, &theme); err != nil {
+		return Theme{}, err
+	}
+	
+	return theme, nil
 }
 
-// GetTheme returns a theme by name.
-func GetTheme(name string) Theme {
-	if theme, ok := Themes[name]; ok {
-		return theme
+// Save saves the theme to a YAML file.
+func (t Theme) Save(path string) error {
+	data, err := yaml.Marshal(t)
+	if err != nil {
+		return err
 	}
-	return DefaultTheme()
+	
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	
+	return os.WriteFile(path, data, 0644)
 }
 
-// ListThemes returns available theme names.
-func ListThemes() []string {
-	names := make([]string, 0, len(Themes))
-	for name := range Themes {
-		names = append(names, name)
+// GetBuiltinThemes returns all built-in themes.
+func GetBuiltinThemes() []Theme {
+	return []Theme{
+		DefaultTheme(),
+		DarkTheme(),
+		LightTheme(),
 	}
-	return names
 }

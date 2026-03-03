@@ -1,12 +1,10 @@
 package executor
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/vigo999/ms-cli/agent"
 	"github.com/vigo999/ms-cli/agent/loop"
 	"github.com/vigo999/ms-cli/integrations/llm"
 	"github.com/vigo999/ms-cli/tools"
@@ -126,25 +124,25 @@ func (r *Runner) Execute(task loop.Task, eventCh chan<- model.Event) error {
 	return r.executeWithRuleAgent(task, eventCh)
 }
 
-// executeWithLLM uses the new ReAct engine with LLM.
+// executeWithLLM uses the smart agent with LLM.
 func (r *Runner) executeWithLLM(task loop.Task, eventCh chan<- model.Event) error {
-	// Create ReAct engine
-	engine := loop.NewReActEngine(r.provider, r.registry)
-	engine.SetMaxIterations(15)
+	// Create agent loop
+	agentLoop := loop.NewAgentLoop(r.registry)
+	agentLoop.SetMaxSteps(15)
 
-	// Execute and stream events
-	eventChResult, err := engine.Execute(task)
+	// Run the agent
+	events, err := agentLoop.Run(task)
 	if err != nil {
 		eventCh <- model.Event{
 			Type:     model.ToolError,
-			ToolName: "ReActEngine",
+			ToolName: "Agent",
 			Message:  fmt.Sprintf("execution failed: %v", err),
 		}
 		return err
 	}
 
-	// Forward events to UI
-	for ev := range eventChResult {
+	// Convert and emit events
+	for _, ev := range events {
 		uiEvent := convertEvent(ev)
 		eventCh <- uiEvent
 	}
@@ -154,8 +152,6 @@ func (r *Runner) executeWithLLM(task loop.Task, eventCh chan<- model.Event) erro
 
 // executeWithRuleAgent uses the rule-based agent (no LLM).
 func (r *Runner) executeWithRuleAgent(task loop.Task, eventCh chan<- model.Event) error {
-	ctx := context.Background()
-
 	// Create agent loop with our registry
 	agentLoop := loop.NewAgentLoop(r.registry)
 	agentLoop.SetMaxSteps(15)
