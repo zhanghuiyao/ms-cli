@@ -14,8 +14,19 @@ func SecurePath(path, baseDir string) (string, error) {
 		return "", fmt.Errorf("path is empty")
 	}
 
+	// Reject paths with backslashes (Windows-style) on Unix systems
+	// This prevents bypassing security using alternative path separators
+	if strings.Contains(path, "\\") {
+		return "", fmt.Errorf("path contains invalid character: backslash")
+	}
+
 	// Clean the path to resolve . and ..
 	path = filepath.Clean(path)
+
+	// If path is relative, join it with the base directory
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(baseDir, path)
+	}
 
 	// Get absolute paths
 	absPath, err := filepath.Abs(path)
@@ -58,7 +69,7 @@ func SecurePath(path, baseDir string) (string, error) {
 				target = filepath.Join(filepath.Dir(absPath), target)
 			}
 			target = filepath.Clean(target)
-			
+
 			// Verify symlink target is within base directory
 			targetCheck := target
 			if !strings.HasSuffix(targetCheck, string(filepath.Separator)) {

@@ -104,7 +104,12 @@ func (t *WriteTool) Execute(ctx context.Context, params map[string]any) (tools.R
 	// Security check
 	baseDir := t.WorkDir
 	if baseDir == "" {
-		baseDir = GetWorkDir()
+		// If no WorkDir is set, allow absolute paths (for tests and flexibility)
+		if filepath.IsAbs(path) {
+			baseDir = filepath.Dir(path)
+		} else {
+			baseDir = GetWorkDir()
+		}
 	}
 
 	securePath, err := SecurePath(path, baseDir)
@@ -184,7 +189,12 @@ func (t *EditTool) Execute(ctx context.Context, params map[string]any) (tools.Re
 	// Security check
 	baseDir := t.WorkDir
 	if baseDir == "" {
-		baseDir = GetWorkDir()
+		// If no WorkDir is set, allow absolute paths (for tests and flexibility)
+		if filepath.IsAbs(path) {
+			baseDir = filepath.Dir(path)
+		} else {
+			baseDir = GetWorkDir()
+		}
 	}
 
 	securePath, err := SecurePath(path, baseDir)

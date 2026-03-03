@@ -66,13 +66,17 @@ func TestCompact(t *testing.T) {
 	m.AddMessage("assistant", "Answer 2")
 
 	initialCount := m.GetTokenCount()
+	t.Logf("Initial token count: %d", initialCount)
 
 	// Compact
 	m.Compact()
 
+	finalCount := m.GetTokenCount()
+	t.Logf("Final token count: %d", finalCount)
+
 	// Should have fewer tokens after compaction
-	if m.GetTokenCount() > initialCount {
-		t.Error("token count should decrease after compaction")
+	if finalCount > initialCount {
+		t.Errorf("token count should decrease after compaction: %d -> %d", initialCount, finalCount)
 	}
 
 	// Should still have messages

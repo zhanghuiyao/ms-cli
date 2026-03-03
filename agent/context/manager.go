@@ -3,7 +3,6 @@ package context
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 )
@@ -55,12 +54,18 @@ func (m *Manager) SetThreshold(t float64) {
 func (m *Manager) SetSystemMessage(content string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	tokens := estimateTokens(content)
+	// Subtract old system message tokens if exists
+	if m.systemMsg != nil {
+		m.totalUsed -= m.systemMsg.Tokens
+	}
 	m.systemMsg = &Message{
 		Role:      "system",
 		Content:   content,
 		Timestamp: time.Now(),
-		Tokens:    estimateTokens(content),
+		Tokens:    tokens,
 	}
+	m.totalUsed += tokens
 }
 
 // AddMessage adds a message to history.
@@ -77,11 +82,6 @@ func (m *Manager) AddMessage(role, content string) {
 	}
 	m.history = append(m.history, msg)
 	m.totalUsed += tokens
-
-	// Check if compaction needed
-	if m.shouldCompactLocked() {
-		m.compactLocked()
-	}
 }
 
 // AddToolResult adds a tool execution result.
@@ -143,15 +143,7 @@ func (m *Manager) compactLocked() {
 
 // summarizeMessages creates a summary of messages (placeholder).
 func (m *Manager) summarizeMessages(msgs []Message) string {
-	var parts []string
-	for _, msg := range msgs {
-		if msg.Role == "user" {
-			parts = append(parts, fmt.Sprintf("User asked: %s", truncate(msg.Content, 100)))
-		} else if msg.Role == "assistant" {
-			parts = append(parts, fmt.Sprintf("Assistant responded about: %s", truncate(msg.Content, 100)))
-		}
-	}
-	return strings.Join(parts, "; ")
+	return fmt.Sprintf("(%d msgs)", len(msgs))
 }
 
 // recalculateTokensLocked must be called with mu held
