@@ -25,7 +25,8 @@ var chatLineStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("237"))
 // App is the TUI root model.
 type App struct {
 	state         model.State
-	viewport      components.Viewport
+	viewport      components.SelectableViewport
+	viewportLines []string // 存储原始文本行用于选择
 	input         components.AutoComplete
 	spinner       components.Spinner
 	thinking      components.ThinkingAnimator
@@ -42,6 +43,7 @@ type App struct {
 func New(ch <-chan model.Event, userCh chan<- string, version, workDir, repoURL string) App {
 	return App{
 		state:         model.NewState(version, workDir, repoURL),
+		viewport:      components.NewSelectableViewport(80, 20),
 		input:         components.NewAutoComplete(),
 		spinner:       components.NewSpinner(),
 		thinking:      components.NewThinkingAnimator(),
@@ -395,15 +397,37 @@ func (a App) appendToLastTool(line string) model.State {
 }
 
 func (a *App) updateViewport() {
-	content := panels.RenderMessages(a.state.Messages, a.spinner.View())
+	// 生成带样式的内容和纯文本内容
+	styledContent := panels.RenderMessages(a.state.Messages, a.spinner.View())
+	
+	// 存储原始文本用于选择
+	a.viewportLines = a.extractPlainTextLines(a.state.Messages)
 	
 	// 如果正在思考，在末尾添加动态 thinking 指示器
 	if a.isThinking {
-		thinkingLine := "\n\n  " + a.thinking.View()
-		content += thinkingLine
+		styledContent += "\n\n  " + a.thinking.View()
+		a.viewportLines = append(a.viewportLines, "", "  Thinking...")
 	}
 	
-	a.viewport = a.viewport.SetContent(content)
+	a.viewport = a.viewport.SetContent(styledContent)
+	// 同时设置原始行用于选择
+	a.viewport = a.viewport.SetLines(a.viewportLines)
+}
+
+// extractPlainTextLines 从消息中提取纯文本行
+func (a *App) extractPlainTextLines(messages []model.Message) []string {
+	var lines []string
+	for _, m := range messages {
+		switch m.Kind {
+		case model.MsgUser:
+			lines = append(lines, "> "+m.Content)
+		case model.MsgAgent:
+			lines = append(lines, strings.Split(m.Content, "\n")...)
+		case model.MsgTool:
+			lines = append(lines, m.ToolName+": "+m.Content)
+		}
+	}
+	return lines
 }
 
 func (a App) chatLine() string {

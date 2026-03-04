@@ -14,20 +14,16 @@ Build:
 go build -o ms-cli ./app
 ```
 
+Run:
+
+```bash
+./ms-cli
+```
+
 Run demo mode:
 
 ```bash
-go run ./app --demo
-# or
 ./ms-cli --demo
-```
-
-Run real mode:
-
-```bash
-go run ./app
-# or
-./ms-cli
 ```
 
 ## Commands
@@ -63,6 +59,11 @@ Any non-slash input is treated as a normal task prompt and routed to the engine.
 
 ### Animated Thinking Indicator
 When the AI is processing, you'll see an animated "⣽ Thinking..." indicator with smooth spinner animation. When complete, it shows "✓ Done" in the top bar.
+
+### Mouse Text Selection
+- **Click and drag** to select text in the chat area
+- **Ctrl+C** to copy selected text to clipboard
+- Selection is highlighted with blue background
 
 ### Slash Command Auto-completion
 Type `/` to see available commands with vertical selection:
