@@ -24,30 +24,30 @@ var chatLineStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("237"))
 
 // App is the TUI root model.
 type App struct {
-	state    model.State
-	viewport components.Viewport
-	input    components.TextInput
-	spinner  components.Spinner
-	thinking components.ThinkingAnimator // 新增：Thinking 动画
-	isThinking bool                     // 新增：是否在思考中
-	streamingText string                // 新增：流式输出缓冲区
-	width    int
-	height   int
-	eventCh  <-chan model.Event
-	userCh   chan<- string // sends user input to the engine bridge
+	state         model.State
+	viewport      components.Viewport
+	input         components.AutoComplete
+	spinner       components.Spinner
+	thinking      components.ThinkingAnimator
+	isThinking    bool
+	streamingText string
+	width         int
+	height        int
+	eventCh       <-chan model.Event
+	userCh        chan<- string
 }
 
 // New creates a new App driven by the given event channel.
 // userCh may be nil (demo mode) — user input won't be forwarded.
 func New(ch <-chan model.Event, userCh chan<- string, version, workDir, repoURL string) App {
 	return App{
-		state:     model.NewState(version, workDir, repoURL),
-		input:     components.NewTextInput(),
-		spinner:   components.NewSpinner(),
-		thinking:  components.NewThinkingAnimator(), // 初始化动画组件
-		isThinking: false,
-		eventCh:   ch,
-		userCh:    userCh,
+		state:         model.NewState(version, workDir, repoURL),
+		input:         components.NewAutoComplete(),
+		spinner:       components.NewSpinner(),
+		thinking:      components.NewThinkingAnimator(),
+		isThinking:    false,
+		eventCh:       ch,
+		userCh:        userCh,
 	}
 }
 
@@ -131,7 +131,42 @@ func (a App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+c":
 		return a, tea.Quit
 
+	case "tab":
+		// 接受自动补全建议
+		a.input = a.input.AcceptSuggestion()
+		return a, nil
+
+	case "shift+tab":
+		// 向上选择建议
+		a.input = a.input.PrevSuggestion()
+		return a, nil
+
+	case "up":
+		// 如果自动补全显示，选择建议；否则滚动 viewport
+		if a.input.Showing() {
+			a.input = a.input.PrevSuggestion()
+			return a, nil
+		}
+		var cmd tea.Cmd
+		a.viewport, cmd = a.viewport.Update(msg)
+		return a, cmd
+
+	case "down":
+		// 如果自动补全显示，选择建议；否则滚动 viewport
+		if a.input.Showing() {
+			a.input = a.input.NextSuggestion()
+			return a, nil
+		}
+		var cmd tea.Cmd
+		a.viewport, cmd = a.viewport.Update(msg)
+		return a, cmd
+
 	case "enter":
+		// 如果有建议显示，先接受建议
+		if a.input.Showing() {
+			a.input = a.input.AcceptSuggestion()
+			return a, nil
+		}
 		val := a.input.Value()
 		if val == "" {
 			return a, nil
@@ -143,12 +178,11 @@ func (a App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			select {
 			case a.userCh <- val:
 			default:
-				// drop if buffer full — avoids freezing the UI
 			}
 		}
 		return a, nil
 
-	case "pgup", "pgdown", "up", "down", "home", "end":
+	case "pgup", "pgdown", "home", "end":
 		var cmd tea.Cmd
 		a.viewport, cmd = a.viewport.Update(msg)
 		return a, cmd
@@ -165,14 +199,20 @@ func (a App) handleEvent(ev model.Event) (tea.Model, tea.Cmd) {
 	case model.AgentThinking:
 		a.isThinking = true
 		a.thinking.Start()
+		mi := a.state.Model
+		mi.Status = "Thinking..."
+		a.state = a.state.WithModel(mi)
 		a.state = a.state.WithMessage(model.Message{Kind: model.MsgThinking})
-		// 启动 thinking 动画 ticker
 		return a, tea.Batch(a.waitForEvent, a.thinkingTick())
 
 	case model.AgentReply:
 		a.isThinking = false
 		a.thinking.Stop()
 		a.streamingText = ""
+		mi := a.state.Model
+		mi.Status = "Done"
+		a.state = a.state.WithModel(mi)
+		a.state = a.state.WithStepProgress(model.StepProgress{IsActive: false})
 		a.state = a.replaceThinking(model.Message{Kind: model.MsgAgent, Content: ev.Message})
 
 	case model.AgentStreaming:
@@ -260,6 +300,15 @@ func (a App) handleEvent(ev model.Event) (tea.Model, tea.Cmd) {
 
 	case model.TaskUpdated:
 		// no-op for now
+
+	case model.StepUpdate:
+		// 更新步骤进度
+		a.state = a.state.WithStepProgress(model.StepProgress{
+			CurrentStep: ev.CtxUsed,  // 复用字段
+			TotalSteps:  ev.TokensUsed, // 复用字段
+			StepName:    ev.Message,
+			IsActive:    true,
+		})
 
 	case model.Done:
 		return a, tea.Quit

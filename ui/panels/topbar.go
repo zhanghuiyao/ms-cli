@@ -20,6 +20,20 @@ var (
 	infoStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("244"))
 
+	stepStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("205")).
+			Bold(true)
+
+	stepDoneStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("114"))
+
+	statusStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("208")).
+			Bold(true)
+
+	statusDoneStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("114"))
+
 	sepStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("238"))
 
@@ -33,25 +47,48 @@ var (
 				Foreground(lipgloss.Color("252"))
 
 	bannerDimStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
-			Italic(true)
+				Foreground(lipgloss.Color("240")).
+				Italic(true)
 )
 
 // RenderTopBar renders the top status bar.
-// When showBanner is true, a second line with workdir + repo is shown.
 func RenderTopBar(s model.State, width int) string {
 	sep := sepStyle.Render("│")
 
-	// Line 1: brand + model info (always shown)
-	left := brandStyle.Render(s.Version)
-	right := strings.Join([]string{
+	// Build right side with model info and step progress
+	rightParts := []string{
 		infoStyle.Render("model:"),
 		infoStyle.Render(s.Model.Name),
 		sep,
 		infoStyle.Render(fmt.Sprintf("ctx: %s/%s", formatTokens(s.Model.CtxUsed), formatTokens(s.Model.CtxMax))),
 		sep,
 		infoStyle.Render(fmt.Sprintf("tokens: %s", formatTokens(s.Model.TokensUsed))),
-	}, " ")
+	}
+
+	// Add status if present
+	if s.Model.Status != "" {
+		if s.Model.Status == "Done" {
+			rightParts = append(rightParts, sep, statusDoneStyle.Render("✓ "+s.Model.Status))
+		} else if s.Model.Status == "Thinking..." {
+			rightParts = append(rightParts, sep, statusStyle.Render("◐ "+s.Model.Status))
+		} else {
+			rightParts = append(rightParts, sep, statusStyle.Render(s.Model.Status))
+		}
+	}
+
+	// Add step progress if active
+	if s.StepProgress.IsActive && s.StepProgress.TotalSteps > 0 {
+		stepStr := fmt.Sprintf("step: %d/%d", s.StepProgress.CurrentStep, s.StepProgress.TotalSteps)
+		if s.StepProgress.CurrentStep == s.StepProgress.TotalSteps {
+			rightParts = append(rightParts, sep, stepDoneStyle.Render(stepStr))
+		} else {
+			rightParts = append(rightParts, sep, stepStyle.Render(stepStr))
+		}
+	}
+
+	// Line 1: brand + info
+	left := brandStyle.Render(s.Version)
+	right := strings.Join(rightParts, " ")
 
 	gap := width - lipgloss.Width(left) - lipgloss.Width(right) - 2
 	if gap < 1 {

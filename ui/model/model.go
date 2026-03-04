@@ -12,6 +12,7 @@ type ModelInfo struct {
 	CtxUsed    int
 	CtxMax     int
 	TokensUsed int
+	Status     string // Thinking, Done, Error, etc.
 }
 
 // MessageKind distinguishes chat message types.
@@ -46,23 +47,24 @@ type Message struct {
 type EventType string
 
 const (
-	TaskUpdated    EventType = "TaskUpdated"
-	CmdStarted     EventType = "CmdStarted"
-	CmdOutput      EventType = "CmdOutput"
-	CmdFinished    EventType = "CmdFinished"
-	AnalysisReady  EventType = "AnalysisReady"
-	AgentReply     EventType = "AgentReply"
-	AgentThinking  EventType = "AgentThinking"
-	AgentStreaming EventType = "AgentStreaming" // 流式输出
-	SessionCleared EventType = "SessionCleared" // 会话已清空
-	TokenUpdate    EventType = "TokenUpdate"
-	ToolRead       EventType = "ToolRead"
-	ToolGrep       EventType = "ToolGrep"
-	ToolGlob       EventType = "ToolGlob"
-	ToolEdit       EventType = "ToolEdit"
-	ToolWrite      EventType = "ToolWrite"
-	ToolError      EventType = "ToolError"
-	Done           EventType = "Done"
+	TaskUpdated     EventType = "TaskUpdated"
+	CmdStarted      EventType = "CmdStarted"
+	CmdOutput       EventType = "CmdOutput"
+	CmdFinished     EventType = "CmdFinished"
+	AnalysisReady   EventType = "AnalysisReady"
+	AgentReply      EventType = "AgentReply"
+	AgentThinking   EventType = "AgentThinking"
+	AgentStreaming  EventType = "AgentStreaming" // 流式输出
+	SessionCleared  EventType = "SessionCleared" // 会话已清空
+	StepUpdate      EventType = "StepUpdate"     // 步骤进度更新
+	TokenUpdate     EventType = "TokenUpdate"
+	ToolRead        EventType = "ToolRead"
+	ToolGrep        EventType = "ToolGrep"
+	ToolGlob        EventType = "ToolGlob"
+	ToolEdit        EventType = "ToolEdit"
+	ToolWrite       EventType = "ToolWrite"
+	ToolError       EventType = "ToolError"
+	Done            EventType = "Done"
 )
 
 // Event is sent from the agent loop to the TUI.
@@ -87,6 +89,15 @@ type State struct {
 	ShowTaskSelector bool
 	WorkDir          string
 	RepoURL          string
+	StepProgress     StepProgress // 步骤进度
+}
+
+// StepProgress tracks the current step in a multi-step process.
+type StepProgress struct {
+	CurrentStep int
+	TotalSteps  int
+	StepName    string
+	IsActive    bool
 }
 
 // NewState returns an initial empty state.
@@ -98,8 +109,9 @@ func NewState(version, workDir, repoURL string) State {
 			Name:   "deepseek-r1",
 			CtxMax: 128000,
 		},
-		WorkDir: workDir,
-		RepoURL: repoURL,
+		WorkDir:      workDir,
+		RepoURL:      repoURL,
+		StepProgress: StepProgress{},
 	}
 }
 
@@ -114,6 +126,7 @@ func (s State) WithTask(t TaskInfo) State {
 		ShowTaskSelector: s.ShowTaskSelector,
 		WorkDir:          s.WorkDir,
 		RepoURL:          s.RepoURL,
+		StepProgress:     s.StepProgress,
 	}
 }
 
@@ -128,6 +141,7 @@ func (s State) WithMessage(m Message) State {
 		ShowTaskSelector: s.ShowTaskSelector,
 		WorkDir:          s.WorkDir,
 		RepoURL:          s.RepoURL,
+		StepProgress:     s.StepProgress,
 	}
 }
 
@@ -142,5 +156,21 @@ func (s State) WithModel(m ModelInfo) State {
 		ShowTaskSelector: s.ShowTaskSelector,
 		WorkDir:          s.WorkDir,
 		RepoURL:          s.RepoURL,
+		StepProgress:     s.StepProgress,
+	}
+}
+
+// WithStepProgress returns a new State with updated step progress.
+func (s State) WithStepProgress(sp StepProgress) State {
+	return State{
+		Version:          s.Version,
+		Tasks:            s.Tasks,
+		ActiveTask:       s.ActiveTask,
+		Model:            s.Model,
+		Messages:         s.Messages,
+		ShowTaskSelector: s.ShowTaskSelector,
+		WorkDir:          s.WorkDir,
+		RepoURL:          s.RepoURL,
+		StepProgress:     sp,
 	}
 }

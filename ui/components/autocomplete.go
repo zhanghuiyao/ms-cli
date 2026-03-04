@@ -23,22 +23,33 @@ func NewAutoComplete() AutoComplete {
 		commands: defaultCommands(),
 	}
 	ac.input.Placeholder = "Type / for commands..."
+	ac.input.Prompt = "> "
+	ac.input.Focus()
+	ac.input.CharLimit = 2000
 	return ac
 }
 
 func defaultCommands() []string {
 	return []string{
+		"/model",
+		"/model list",
+		"/model use",
+		"/compact",
+		"/clear",
+		"/new",
+		"/help",
+		"/save",
+		"/load",
+		"/history",
+		"/search",
+		"/tools",
+		"/temperature",
+		"/tokens",
+		"/theme",
 		"/roadmap",
 		"/roadmap status",
 		"/weekly",
 		"/weekly status",
-		"/help",
-		"/config",
-		"/quit",
-		"/clear",
-		"/sessions",
-		"/sessions list",
-		"/sessions load",
 	}
 }
 
@@ -46,16 +57,19 @@ func defaultCommands() []string {
 func (ac AutoComplete) Update(msg tea.Msg) (AutoComplete, tea.Cmd) {
 	var cmd tea.Cmd
 	ac.input, cmd = ac.input.Update(msg)
-	
+
 	// Update suggestions based on input
 	val := ac.input.Value()
 	if strings.HasPrefix(val, "/") {
 		ac.suggestions = ac.filter(val)
 		ac.showing = len(ac.suggestions) > 0
+		if ac.selected >= len(ac.suggestions) {
+			ac.selected = 0
+		}
 	} else {
 		ac.showing = false
 	}
-	
+
 	return ac, cmd
 }
 
@@ -71,34 +85,38 @@ func (ac AutoComplete) filter(input string) []string {
 }
 
 // NextSuggestion cycles to the next suggestion.
-func (ac *AutoComplete) NextSuggestion() {
+func (ac AutoComplete) NextSuggestion() AutoComplete {
 	if len(ac.suggestions) > 0 {
 		ac.selected = (ac.selected + 1) % len(ac.suggestions)
 	}
+	return ac
 }
 
 // PrevSuggestion cycles to the previous suggestion.
-func (ac *AutoComplete) PrevSuggestion() {
+func (ac AutoComplete) PrevSuggestion() AutoComplete {
 	if len(ac.suggestions) > 0 {
 		ac.selected--
 		if ac.selected < 0 {
 			ac.selected = len(ac.suggestions) - 1
 		}
 	}
+	return ac
 }
 
 // AcceptSuggestion applies the current suggestion.
-func (ac *AutoComplete) AcceptSuggestion() {
+func (ac AutoComplete) AcceptSuggestion() AutoComplete {
 	if ac.showing && len(ac.suggestions) > 0 {
 		ac.input.SetValue(ac.suggestions[ac.selected] + " ")
 		ac.showing = false
+		ac.selected = 0
 	}
+	return ac
 }
 
 // View renders the auto-complete component.
 func (ac AutoComplete) View() string {
 	view := ac.input.View()
-	
+
 	if ac.showing {
 		view += "\n"
 		for i, sug := range ac.suggestions {
@@ -113,8 +131,13 @@ func (ac AutoComplete) View() string {
 			}
 		}
 	}
-	
+
 	return view
+}
+
+// Showing returns true if suggestions are being shown.
+func (ac AutoComplete) Showing() bool {
+	return ac.showing
 }
 
 // Value returns the input value.
@@ -123,23 +146,25 @@ func (ac AutoComplete) Value() string {
 }
 
 // SetValue sets the input value.
-func (ac *AutoComplete) SetValue(s string) {
+func (ac AutoComplete) SetValue(s string) AutoComplete {
 	ac.input.SetValue(s)
+	return ac
 }
 
 // Focus focuses the input.
-func (ac *AutoComplete) Focus() tea.Cmd {
+func (ac AutoComplete) Focus() tea.Cmd {
 	return ac.input.Focus()
 }
 
 // Blur removes focus.
-func (ac *AutoComplete) Blur() {
+func (ac AutoComplete) Blur() {
 	ac.input.Blur()
 }
 
 // Reset clears the input.
-func (ac *AutoComplete) Reset() {
+func (ac AutoComplete) Reset() AutoComplete {
 	ac.input.Reset()
 	ac.showing = false
 	ac.selected = 0
+	return ac
 }

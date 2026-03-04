@@ -44,12 +44,16 @@ func (a *Application) handleCommand(input string) {
 		a.cmdLoad(parts[1:])
 	case "/history":
 		a.cmdHistory()
+	case "/search":
+		a.cmdSearch(parts[1:])
 	case "/tools":
 		a.cmdTools()
 	case "/temperature":
 		a.cmdTemperature(parts[1:])
 	case "/tokens":
 		a.cmdTokens(parts[1:])
+	case "/theme":
+		a.cmdTheme(parts[1:])
 
 	default:
 		a.EventCh <- model.Event{
@@ -329,6 +333,68 @@ func (a *Application) cmdTokens(args []string) {
 	a.EventCh <- model.Event{Type: model.AgentReply, Message: msg}
 }
 
+// ============ 消息搜索命令 ============
+
+func (a *Application) cmdSearch(args []string) {
+	if len(args) == 0 {
+		a.EventCh <- model.Event{
+			Type:    model.AgentReply,
+			Message: "Usage: /search \u003ckeyword\u003e - Search through message history",
+		}
+		return
+	}
+	
+	keyword := strings.ToLower(args[0])
+	matches := 0
+	var results []string
+	
+	// 搜索保存的会话
+	sessions, _ := a.SessionManager.List()
+	for _, session := range sessions {
+		if strings.Contains(strings.ToLower(session.Name), keyword) {
+			matches++
+			results = append(results, fmt.Sprintf("Session: %s (%s)", session.Name, session.ID[:8]))
+		}
+	}
+	
+	if matches == 0 {
+		a.EventCh <- model.Event{
+			Type:    model.AgentReply,
+			Message: fmt.Sprintf("No matches found for '%s'", keyword),
+		}
+		return
+	}
+	
+	msg := fmt.Sprintf("Found %d match(es) for '%s':\n\n", matches, keyword)
+	for _, r := range results {
+		msg += r + "\n"
+	}
+	a.EventCh <- model.Event{Type: model.AgentReply, Message: msg}
+}
+
+// ============ 主题切换命令 ============
+
+func (a *Application) cmdTheme(args []string) {
+	if len(args) == 0 {
+		msg := fmt.Sprintf("Current theme: %s\n\nAvailable themes: dark, light", a.Config.UI.Theme)
+		a.EventCh <- model.Event{Type: model.AgentReply, Message: msg}
+		return
+	}
+	
+	theme := strings.ToLower(args[0])
+	switch theme {
+	case "dark", "light":
+		a.Config.UI.Theme = theme
+		msg := fmt.Sprintf("Theme changed to: %s (will take effect on restart)", theme)
+		a.EventCh <- model.Event{Type: model.AgentReply, Message: msg}
+	default:
+		a.EventCh <- model.Event{
+			Type:    model.AgentReply,
+			Message: "Invalid theme. Available: dark, light",
+		}
+	}
+}
+
 // ============ 帮助命令 ============
 
 func (a *Application) cmdHelp() {
@@ -350,6 +416,8 @@ Model Configuration:
 
 Context Management:
   /compact          Manually compress context
+  /search [keyword] Search through message history
+  /theme [name]     Switch theme (dark/light)
 
 Project Commands:
   /roadmap status   Show project roadmap

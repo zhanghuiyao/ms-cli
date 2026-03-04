@@ -62,10 +62,59 @@ Any non-slash input is treated as a normal task prompt and routed to the engine.
 ## Features
 
 ### Animated Thinking Indicator
-When the AI is processing, you'll see an animated "⣽ Thinking..." indicator with smooth spinner animation.
+When the AI is processing, you'll see an animated "⣽ Thinking..." indicator with smooth spinner animation. When complete, it shows "✓ Done" in the top bar.
+
+### Slash Command Auto-completion
+Type `/` to see available commands with vertical selection:
+- Use `↑/↓` to navigate through suggestions
+- Press `Tab` or `Enter` to accept the selected command
+- Commands are filtered as you type
 
 ### Stream-Ready Architecture
-The TUI is designed to support streaming responses (typing effect) when connected to a streaming LLM provider.
+The TUI supports streaming responses (typing effect) when connected to a streaming LLM provider.
+
+### Step Progress Indicator
+Multi-step tasks show progress in the top bar (e.g., "step: 2/5").
+
+## Available Commands
+
+### Session Management
+- `/new` - Start a new session (clears context, preserves system prompt)
+- `/clear` - Clear current session messages
+- `/save [file]` - Save session to file (default: session.json)
+- `/load <file>` - Load session from file
+- `/history` - Show session history
+
+### Model Configuration
+- `/model` - Show current model info
+- `/model list` - List available models
+- `/model use <name>` - Switch to a different model
+- `/temperature <n>` - Set temperature (0.0-2.0)
+- `/tokens <n>` - Set max tokens
+
+### Context Management
+- `/compact` - Manually compress context
+- `/search <keyword>` - Search through message history
+- `/theme <name>` - Switch theme (dark/light)
+
+### Project Commands
+- `/roadmap status [path]` - Show project roadmap progress
+- `/weekly status [path]` - Show weekly update
+
+### Help
+- `/tools` - List available tools
+- `/help` - Show all commands
+
+## Keybindings
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Send message / Accept suggestion |
+| `Tab` | Accept auto-complete suggestion |
+| `↑/↓` | Navigate suggestions (when shown) or scroll chat |
+| `PgUp/PgDn` | Scroll chat |
+| `Home/End` | Jump to top/bottom |
+| `Ctrl+C` | Quit |
 
 ## Keybindings
 

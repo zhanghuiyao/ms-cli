@@ -7,6 +7,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/vigo999/ms-cli/agent/loop"
 	"github.com/vigo999/ms-cli/executor"
+	"github.com/vigo999/ms-cli/integrations/llm"
+	"github.com/vigo999/ms-cli/internal/config"
 	"github.com/vigo999/ms-cli/ui"
 	"github.com/vigo999/ms-cli/ui/model"
 )
@@ -56,24 +58,19 @@ func (a *Application) processInput(input string) {
 		return
 	}
 
-	// Free-form: send to engine using ReAct engine
-	a.EventCh <- model.Event{Type: model.AgentThinking}
-
-	// Use executor to run task through ReAct engine
-	runner := executor.NewRunnerWithWorkDir(a.WorkDir)
-	
-	// Configure LLM if API key is available
+	// Free-form: send to engine with streaming support
+	// Use streaming runner for better UX
+	var runner *executor.StreamingRunner
 	if a.Config != nil && a.Config.Model.APIKey != "" {
-		runner = executor.NewSmartRunnerWithProvider(
-			a.Config.Model.Provider,
-			a.Config.Model.APIKey,
-			a.Config.Model.Endpoint,
-		)
+		provider := createProvider(a.Config)
+		runner = executor.NewStreamingRunner(a.WorkDir, provider)
+	} else {
+		runner = executor.NewStreamingRunner(a.WorkDir, nil)
 	}
 
 	go func() {
 		task := loop.Task{Description: trimmed}
-		if err := runner.Execute(task, a.EventCh); err != nil {
+		if err := runner.ExecuteStream(task, a.EventCh); err != nil {
 			a.EventCh <- model.Event{
 				Type:     model.ToolError,
 				ToolName: "Executor",
@@ -81,6 +78,30 @@ func (a *Application) processInput(input string) {
 			}
 		}
 	}()
+}
+
+// createProvider creates an LLM provider from config.
+func createProvider(cfg *config.Config) llm.Provider {
+	switch strings.ToLower(cfg.Model.Provider) {
+	case "anthropic", "claude":
+		endpoint := cfg.Model.Endpoint
+		if endpoint == "" {
+			endpoint = "https://api.anthropic.com/v1"
+		}
+		return llm.NewAnthropicProvider(cfg.Model.APIKey, endpoint)
+	case "openrouter":
+		endpoint := cfg.Model.Endpoint
+		if endpoint == "" {
+			endpoint = "https://openrouter.ai/api/v1"
+		}
+		return llm.NewOpenRouterProvider(cfg.Model.APIKey, endpoint)
+	default:
+		endpoint := cfg.Model.Endpoint
+		if endpoint == "" {
+			endpoint = "https://api.openai.com/v1"
+		}
+		return llm.NewOpenAIProvider(cfg.Model.APIKey, endpoint)
+	}
 }
 
 // runDemo starts the TUI with fake events for preview/testing.
