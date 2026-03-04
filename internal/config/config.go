@@ -20,10 +20,12 @@ type Config struct {
 
 // ModelConfig holds LLM provider settings.
 type ModelConfig struct {
-	Provider string `yaml:"provider"`
-	Endpoint string `yaml:"endpoint"`
-	APIKey   string `yaml:"api_key"`
-	Model    string `yaml:"model"`
+	Provider    string  `yaml:"provider"`
+	Endpoint    string  `yaml:"endpoint"`
+	APIKey      string  `yaml:"api_key"`
+	Model       string  `yaml:"model"`
+	Temperature float64 `yaml:"temperature"`
+	MaxTokens   int     `yaml:"max_tokens"`
 }
 
 // BudgetConfig holds token and cost limits.
@@ -65,9 +67,11 @@ type MemoryConfig struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Model: ModelConfig{
-			Provider: "openai",
-			Endpoint: "https://api.openai.com/v1",
-			Model:    "gpt-4",
+			Provider:    "openai",
+			Endpoint:    "https://api.openai.com/v1",
+			Model:       "gpt-4",
+			Temperature: 0.7,
+			MaxTokens:   4096,
 		},
 		Budget: BudgetConfig{
 			MaxTokens:  32768,

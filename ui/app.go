@@ -2,6 +2,7 @@ package ui
 
 import (
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/vigo999/ms-cli/ui/components"
@@ -27,6 +28,9 @@ type App struct {
 	viewport components.Viewport
 	input    components.TextInput
 	spinner  components.Spinner
+	thinking components.ThinkingAnimator // 新增：Thinking 动画
+	isThinking bool                     // 新增：是否在思考中
+	streamingText string                // 新增：流式输出缓冲区
 	width    int
 	height   int
 	eventCh  <-chan model.Event
@@ -37,11 +41,13 @@ type App struct {
 // userCh may be nil (demo mode) — user input won't be forwarded.
 func New(ch <-chan model.Event, userCh chan<- string, version, workDir, repoURL string) App {
 	return App{
-		state:   model.NewState(version, workDir, repoURL),
-		input:   components.NewTextInput(),
-		spinner: components.NewSpinner(),
-		eventCh: ch,
-		userCh:  userCh,
+		state:     model.NewState(version, workDir, repoURL),
+		input:     components.NewTextInput(),
+		spinner:   components.NewSpinner(),
+		thinking:  components.NewThinkingAnimator(), // 初始化动画组件
+		isThinking: false,
+		eventCh:   ch,
+		userCh:    userCh,
 	}
 }
 
@@ -56,6 +62,7 @@ func (a App) waitForEvent() tea.Msg {
 func (a App) Init() tea.Cmd {
 	return tea.Batch(
 		a.spinner.Model.Tick,
+		a.thinking.Init(), // 初始化 thinking 动画
 		a.waitForEvent,
 	)
 }
@@ -90,11 +97,29 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case model.Event:
 		return a.handleEvent(msg)
 
+	case components.ThinkingMsg:
+		// 处理 Thinking 动画 tick
+		if a.isThinking {
+			var cmd tea.Cmd
+			a.thinking, cmd = a.thinking.Update(msg)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return a, tea.Batch(cmds...)
+		}
+
 	default:
 		var cmd tea.Cmd
 		a.spinner, cmd = a.spinner.Update(msg)
 		if cmd != nil {
 			cmds = append(cmds, cmd)
+		}
+		// 同时更新 thinking 动画
+		if a.isThinking {
+			a.thinking, cmd = a.thinking.Update(msg)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		}
 	}
 
@@ -138,10 +163,26 @@ func (a App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (a App) handleEvent(ev model.Event) (tea.Model, tea.Cmd) {
 	switch ev.Type {
 	case model.AgentThinking:
+		a.isThinking = true
+		a.thinking.Start()
 		a.state = a.state.WithMessage(model.Message{Kind: model.MsgThinking})
+		// 启动 thinking 动画 ticker
+		return a, tea.Batch(a.waitForEvent, a.thinkingTick())
 
 	case model.AgentReply:
+		a.isThinking = false
+		a.thinking.Stop()
+		a.streamingText = ""
 		a.state = a.replaceThinking(model.Message{Kind: model.MsgAgent, Content: ev.Message})
+
+	case model.AgentStreaming:
+		// 流式输出：追加到缓冲区并更新最后一条消息
+		a.streamingText += ev.Message
+		a.state = a.replaceOrUpdateStreaming(model.Message{Kind: model.MsgAgent, Content: a.streamingText})
+
+	case model.SessionCleared:
+		a.state = model.NewState(a.state.Version, a.state.WorkDir, a.state.RepoURL)
+		a.state.Model.Name = ev.Message // 保留当前模型名称
 
 	case model.CmdStarted:
 		a.state = a.state.WithMessage(model.Message{
@@ -228,6 +269,40 @@ func (a App) handleEvent(ev model.Event) (tea.Model, tea.Cmd) {
 	return a, a.waitForEvent
 }
 
+// thinkingTick creates a command that sends a ThinkingMsg periodically.
+func (a App) thinkingTick() tea.Cmd {
+	return tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg {
+		return components.ThinkingMsg{}
+	})
+}
+
+// replaceOrUpdateStreaming replaces a thinking message or updates the last streaming message.
+func (a App) replaceOrUpdateStreaming(m model.Message) model.State {
+	msgs := make([]model.Message, 0, len(a.state.Messages))
+	
+	// 如果最后一条是 thinking 或者是 agent 消息（流式），则替换
+	for i, msg := range a.state.Messages {
+		if i == len(a.state.Messages)-1 && (msg.Kind == model.MsgThinking || msg.Kind == model.MsgAgent) {
+			msgs = append(msgs, m)
+		} else {
+			msgs = append(msgs, msg)
+		}
+	}
+	
+	// 如果消息列表为空，添加新消息
+	if len(a.state.Messages) == 0 {
+		msgs = append(msgs, m)
+	}
+	
+	return model.State{
+		Version:  a.state.Version,
+		Model:    a.state.Model,
+		Messages: msgs,
+		WorkDir:  a.state.WorkDir,
+		RepoURL:  a.state.RepoURL,
+	}
+}
+
 func (a App) replaceThinking(m model.Message) model.State {
 	msgs := make([]model.Message, 0, len(a.state.Messages))
 	for _, msg := range a.state.Messages {
@@ -272,6 +347,13 @@ func (a App) appendToLastTool(line string) model.State {
 
 func (a *App) updateViewport() {
 	content := panels.RenderMessages(a.state.Messages, a.spinner.View())
+	
+	// 如果正在思考，在末尾添加动态 thinking 指示器
+	if a.isThinking {
+		thinkingLine := "\n\n  " + a.thinking.View()
+		content += thinkingLine
+	}
+	
 	a.viewport = a.viewport.SetContent(content)
 }
 

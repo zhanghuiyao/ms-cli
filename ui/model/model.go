@@ -46,21 +46,23 @@ type Message struct {
 type EventType string
 
 const (
-	TaskUpdated   EventType = "TaskUpdated"
-	CmdStarted    EventType = "CmdStarted"
-	CmdOutput     EventType = "CmdOutput"
-	CmdFinished   EventType = "CmdFinished"
-	AnalysisReady EventType = "AnalysisReady"
-	AgentReply    EventType = "AgentReply"
-	AgentThinking EventType = "AgentThinking"
-	TokenUpdate   EventType = "TokenUpdate"
-	ToolRead      EventType = "ToolRead"
-	ToolGrep      EventType = "ToolGrep"
-	ToolGlob      EventType = "ToolGlob"
-	ToolEdit      EventType = "ToolEdit"
-	ToolWrite     EventType = "ToolWrite"
-	ToolError     EventType = "ToolError"
-	Done          EventType = "Done"
+	TaskUpdated    EventType = "TaskUpdated"
+	CmdStarted     EventType = "CmdStarted"
+	CmdOutput      EventType = "CmdOutput"
+	CmdFinished    EventType = "CmdFinished"
+	AnalysisReady  EventType = "AnalysisReady"
+	AgentReply     EventType = "AgentReply"
+	AgentThinking  EventType = "AgentThinking"
+	AgentStreaming EventType = "AgentStreaming" // 流式输出
+	SessionCleared EventType = "SessionCleared" // 会话已清空
+	TokenUpdate    EventType = "TokenUpdate"
+	ToolRead       EventType = "ToolRead"
+	ToolGrep       EventType = "ToolGrep"
+	ToolGlob       EventType = "ToolGlob"
+	ToolEdit       EventType = "ToolEdit"
+	ToolWrite      EventType = "ToolWrite"
+	ToolError      EventType = "ToolError"
+	Done           EventType = "Done"
 )
 
 // Event is sent from the agent loop to the TUI.

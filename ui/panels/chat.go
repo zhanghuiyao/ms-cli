@@ -101,7 +101,8 @@ func renderAgentMsg(content string) string {
 }
 
 func renderThinking(spinnerView string) string {
-	return fmt.Sprintf("  %s %s", spinnerView, thinkingStyle.Render("Thinking..."))
+	// 动画现在在 app.go 中动态渲染，这里返回空占位
+	return ""
 }
 
 func renderTool(m model.Message) string {

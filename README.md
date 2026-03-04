@@ -34,10 +34,38 @@ go run ./app
 
 In TUI input, use slash commands:
 
-- `/roadmap status [path]` (default: `roadmap.yaml`)
-- `/weekly status [path]` (default: `weekly.md`)
+### Session Management
+- `/new` - Start a new session (clears context, preserves system prompt)
+- `/clear` - Clear current session messages
+- `/save [file]` - Save session to file (default: session.json)
+- `/load [file]` - Load session from file
+- `/history` - Show session history
+
+### Model Configuration
+- `/model` - Show current model info
+- `/model list` - List available models
+- `/model use <name>` - Switch to a different model
+- `/temperature <n>` - Set temperature (0.0-2.0)
+- `/tokens <n>` - Set max tokens
+
+### Context Management
+- `/compact` - Manually compress context
+- `/roadmap status [path]` - Show project roadmap progress
+- `/weekly status [path]` - Show weekly update
+
+### Help
+- `/tools` - List available tools
+- `/help` - Show all commands
 
 Any non-slash input is treated as a normal task prompt and routed to the engine.
+
+## Features
+
+### Animated Thinking Indicator
+When the AI is processing, you'll see an animated "⣽ Thinking..." indicator with smooth spinner animation.
+
+### Stream-Ready Architecture
+The TUI is designed to support streaming responses (typing effect) when connected to a streaming LLM provider.
 
 ## Keybindings
 
